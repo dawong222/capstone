@@ -16,19 +16,19 @@ jobs:
       - name: JDK 설정
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
       - name: Gradle 권한 부여
         run: chmod +x gradlew
 
-      - name: 프로젝트 빌드
+      - name: 빌드
         run: ./gradlew build -x test
 
-      - name: jar 파일 확인
+      - name: jar 확인
         run: ls build/libs
 
-      - name: EC2로 jar 전송
+      - name: EC2로 파일 전송
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -37,7 +37,7 @@ jobs:
           source: "build/libs/*.jar"
           target: "/home/ubuntu/"
 
-      - name: EC2에서 Spring 실행
+      - name: 서버 실행
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -48,18 +48,10 @@ jobs:
             pkill -f 'java -jar' || true
 
             echo "jar 파일 확인"
-<<<<<<< HEAD
             ls /home/ubuntu
 
-            echo "서버 실행"
-            nohup java -jar /home/ubuntu/*.jar > app.log 2>&1 &
-=======
-            ls -al /home/ubuntu
-
             JAR_NAME=$(ls /home/ubuntu/*.jar | head -n 1)
-
-            echo "실행할 jar: $JAR_NAME"
+            echo "실행 파일: $JAR_NAME"
 
             echo "서버 실행"
             nohup java -jar $JAR_NAME > app.log 2>&1 &
->>>>>>> 4a79437 (deploy.yml modify)
