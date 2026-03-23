@@ -25,16 +25,29 @@ jobs:
           chmod +x gradlew
           ./gradlew clean build -x test
 
+      # 🔥 기존 jar 삭제 (중요)
+      - name: 서버 정리
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            echo "기존 jar 삭제"
+            rm -f /home/ubuntu/app.jar
+
+      # 🔥 jar 전송 (이름 고정)
       - name: EC2로 jar 전송
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
-          source: "build/libs/*.jar"
+          source: "build/libs/app.jar"
           target: "/home/ubuntu/"
 
-      - name: 서버에서 실행
+      # 🔥 서버 실행
+      - name: 서버 실행
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -42,13 +55,7 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             echo "기존 서버 종료"
-            pkill -f java || true
+            pkill -f app.jar || true
 
-            echo "jar 확인"
-            ls /home/ubuntu
-
-            JAR=$(ls /home/ubuntu/*.jar | head -n 1)
-            echo "실행 파일: $JAR"
-
-            echo "서버 실행"
-            nohup java -jar $JAR > app.log 2>&1 &
+            echo "실행"
+            nohup java -jar /home/ubuntu/app.jar > /home/ubuntu/app.log 2>&1 &
