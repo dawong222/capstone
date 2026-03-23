@@ -48,7 +48,7 @@ jobs:
             pkill -f 'java -jar' || true
 
             echo "jar 파일 확인"
-            ls /home/ubuntu/build/libs
+            ls /home/ubuntu
 
             echo "서버 실행"
-            nohup java -jar /home/ubuntu/build/libs/*.jar > app.log 2>&1 &
+            nohup java -jar /home/ubuntu/*.jar > app.log 2>&1 &
