@@ -58,11 +58,15 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             APP_DIR="/home/${{ secrets.EC2_USER }}/app"
+            
+            echo "Finding jar file..."
             APP_JAR=$(ls $APP_DIR/*.jar | head -n 1)
+            echo "Jar file: $APP_JAR"
+            
             echo "Stopping existing application if any..."
             pkill -f "$APP_JAR" || true
             sleep 2
-
+            
             echo "Starting new application..."
             ( setsid java -jar -Dspring.profiles.active=prod "$APP_JAR" > "$APP_DIR/nohup.out" 2>&1 & )
           sync: false
