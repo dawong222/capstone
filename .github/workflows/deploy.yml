@@ -57,7 +57,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
           script: |
-            APP_DIR="/home/${{ secrets.EC2_USER }}/app"
+            APP_DIR="/home/ubuntu/app"
             
             echo "Finding jar file..."
             APP_JAR=$(ls $APP_DIR/*.jar | head -n 1)
