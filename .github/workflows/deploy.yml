@@ -20,14 +20,41 @@ jobs:
           port: 22 # 접속포트
           script: | # 실행할 스크립트
             cd /home/ubuntu/capstone
-  
+          
+            echo "📁 현재 경로 확인"
+            pwd
+            ls
+          
+            echo "📥 최신 코드 가져오기"
             git pull origin dev
-  
+          
+            echo "⚙️ Java 버전 확인"
+            java -version
+          
+            echo "🔨 빌드 시작"
             chmod +x gradlew
-            ./gradlew build -x test
-  
+            ./gradlew clean build -x test
+          
+            echo "📦 jar 파일 확인"
+            ls build/libs
+          
+            echo "🎯 실행할 jar 지정"
+            JAR=build/libs/app.jar
+            echo "JAR: $JAR"
+          
+            if [ ! -f "$JAR" ]; then
+            echo "❌ app.jar 없음 → 실행 중단"
+            exit 1
+            fi
+          
+            echo "🛑 기존 서버 종료"
             pkill -f java || true
-  
-            JAR=$(ls build/libs/*SNAPSHOT.jar | head -n 1)
-  
+          
+            echo "🚀 서버 실행"
             nohup java -jar $JAR > app.log 2>&1 &
+          
+            echo "⏳ 서버 시작 대기"
+            sleep 5
+          
+            echo "📄 로그 확인"
+            tail -n 20 app.log
