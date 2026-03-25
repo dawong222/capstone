@@ -19,7 +19,7 @@ jobs:
           key: ${{ secrets.EC2_KEY }} # ec2 instance pem key
           port: 22 # 접속포트
           script: | # 실행할 스크립트
-            cd /home/ubuntu/Server-V2
+            cd /home/ubuntu/capstone_spring
             git pull origin dev
             pm2 kill
             npm i --force
