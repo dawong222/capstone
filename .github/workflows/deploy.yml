@@ -19,9 +19,15 @@ jobs:
           key: ${{ secrets.EC2_KEY }} # ec2 instance pem key
           port: 22 # 접속포트
           script: | # 실행할 스크립트
-            cd /home/ubuntu/capstone_spring
+            cd /home/ubuntu/Server-V2
+  
             git pull origin dev
-            pm2 kill
-            npm i --force
-            npm run build
-            pm2 start dist/main.js
+  
+            chmod +x gradlew
+            ./gradlew build -x test
+  
+            pkill -f java || true
+  
+            JAR=$(ls build/libs/*SNAPSHOT.jar | head -n 1)
+  
+            nohup java -jar $JAR > app.log 2>&1 &
