@@ -5,7 +5,8 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public class ChargerStatusDto {
-    private int charger_id;
-    private boolean has_demand;
+public class TransferDto {
+
+    private Long targetStationId;
+    private double powerW;
 }

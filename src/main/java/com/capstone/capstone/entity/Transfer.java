@@ -6,17 +6,19 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Getter @Setter
+@Getter
+@Setter
 @NoArgsConstructor
-public class Charger {
+public class Transfer {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String type;
+    private Double powerW;
+    private Long targetStationId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "station_id")
-    private ChargingStation station;
+    @JoinColumn(name = "hourly_plan_id")
+    private HourlyPlan hourlyPlan;
 }

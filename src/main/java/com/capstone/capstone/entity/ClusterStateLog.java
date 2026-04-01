@@ -6,17 +6,22 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Getter @Setter
+@Getter
+@Setter
 @NoArgsConstructor
-public class Charger {
+public class ClusterStateLog {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String type;
+    private Integer timeIndex;
+    private Integer dayOfWeek;
+    private Double touPrice;
+    private Double gridLimitW;
+    private Boolean transferEnabled;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "station_id")
-    private ChargingStation station;
+    @JoinColumn(name = "schedule_job_id")
+    private ScheduleJob scheduleJob;
 }

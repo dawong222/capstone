@@ -1,29 +1,26 @@
 package com.capstone.capstone.entity;
 
 import jakarta.persistence.*;
-import lombok.*;
-
-import java.time.LocalDateTime;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Getter
 @Setter
 @NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ESS {
+public class Constraints {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private float capacity;
+    private Double socMin;
+    private Double socMax;
+    private Double essMaxChargeW;
+    private Double essMaxDischargeW;
 
-    private float currentSoc;
-
-    private LocalDateTime createdAt;
-
-    @OneToOne
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_id", unique = true)
     private ChargingStation station;
 }

@@ -1,17 +1,17 @@
 package com.capstone.capstone.entity;
 
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-import java.time.LocalDateTime;
+import javax.swing.*;
 import java.util.List;
 
 @Entity
 @Getter
 @Setter
 @NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class ChargingStation {
 
     @Id
@@ -19,32 +19,12 @@ public class ChargingStation {
     private Long id;
 
     private String name;
-
     private String location;
+    private Boolean isActive;
 
-    private LocalDateTime createdAt;
+    @OneToMany(mappedBy = "station", cascade = CascadeType.ALL)
+    private List<Charger> chargers;
 
     @OneToOne(mappedBy = "station", cascade = CascadeType.ALL)
-    private ESS ess;
-
-    @OneToMany(mappedBy = "station")
-    private List<SensorData> sensorDataList;
-
-    @OneToMany(mappedBy = "station")
-    private List<PVGeneration> pvGenerationList;
-
-    @OneToMany(mappedBy = "station")
-    private List<EVRequest> evRequestList;
-
-    @OneToMany(mappedBy = "station")
-    private List<SchedulingResult> schedulingResults;
-
-    @OneToMany(mappedBy = "station")
-    private List<StationStatus> stationStatuses;
-
-    @OneToMany(mappedBy = "station")
-    private List<EnergySummary> energySummaries;
-
-    @OneToMany(mappedBy = "station")
-    private List<CostAnalysis> costAnalyses;
+    private Constraints constraints;
 }
