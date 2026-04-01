@@ -15,6 +15,7 @@ public class ChargerStateLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "power_demand_w")
     private Double powerDemandW;
     private Boolean isActive;
 

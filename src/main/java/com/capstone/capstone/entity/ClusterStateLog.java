@@ -18,6 +18,7 @@ public class ClusterStateLog {
     private Integer timeIndex;
     private Integer dayOfWeek;
     private Double touPrice;
+    @Column(name = "grid_limit_w")
     private Double gridLimitW;
     private Boolean transferEnabled;
 
