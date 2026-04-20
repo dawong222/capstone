@@ -9,5 +9,5 @@ public class ConstraintsDto {
     private double socMin;
     private double socMax;
     private double essMaxCharge;
-    private double essMacDischarge;
+    private double essMaxDischarge;
 }

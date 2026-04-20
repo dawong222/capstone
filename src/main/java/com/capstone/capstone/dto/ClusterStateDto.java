@@ -10,6 +10,6 @@ public class ClusterStateDto {
     private int timeIndex;
     private int dayOfWeek;
     private double touPrice;
-    private double gridLimitW;
+    private double gridLimit;
     private boolean transferEnabled;
 }

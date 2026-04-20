@@ -7,9 +7,9 @@ import lombok.Setter;
 @Setter
 public class PowerDto {
 
-    private double pPvW;
-    private double pLoadW;
-    private double pEssW;
-    private double pGridW;
-    private double pTrW;
+    private double pPv;
+    private double pLoad;
+    private double pEss;
+    private double pGrid;
+    private double pTr;
 }

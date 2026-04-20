@@ -19,10 +19,8 @@ public class HourlyPlan {
 
     private Integer hour;
     private String essMode;
-    @Column(name = "ess_power_w")
-    private Double essPowerW;
-    @Column(name = "grid_usage_w")
-    private Double gridUsageW;
+    private Double essPower;
+    private Double gridUsage;
     private Double pvPriority;
 
     @ManyToOne(fetch = FetchType.LAZY)

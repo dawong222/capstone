@@ -9,7 +9,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class ClusterStateLog {
+public class ClusterState {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -18,8 +18,7 @@ public class ClusterStateLog {
     private Integer timeIndex;
     private Integer dayOfWeek;
     private Double touPrice;
-    @Column(name = "grid_limit_w")
-    private Double gridLimitW;
+    private Double gridLimit;
     private Boolean transferEnabled;
 
     @ManyToOne(fetch = FetchType.LAZY)

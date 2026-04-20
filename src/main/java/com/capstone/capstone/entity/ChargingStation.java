@@ -5,7 +5,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import javax.swing.*;
 import java.util.List;
 
 @Entity
@@ -27,4 +26,7 @@ public class ChargingStation {
 
     @OneToOne(mappedBy = "station", cascade = CascadeType.ALL)
     private Constraints constraints;
+
+    @OneToOne(mappedBy = "station", cascade = CascadeType.ALL)
+    private StationState currentState;
 }

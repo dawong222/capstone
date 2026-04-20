@@ -10,7 +10,11 @@ import java.util.List;
 public class AiRequestDto {
 
     private String requestId;
-    private String timestamp;
+    private String requestTimestamp;
+
+    private String scheduleTargetDate;
+    private String scheduleHorizonHours;
+
     private ClusterStateDto clusterState;
     private List<StationDto> stations;
 

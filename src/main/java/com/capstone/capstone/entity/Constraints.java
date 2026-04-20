@@ -17,10 +17,8 @@ public class Constraints {
 
     private Double socMin;
     private Double socMax;
-    @Column(name = "ess_max_charge_w")
-    private Double essMaxChargeW;
-    @Column(name = "ess_max_discharge_w")
-    private Double essMaxDischargeW;
+    private Double essMaxCharge;
+    private Double essMaxDischarge;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_id", unique = true)

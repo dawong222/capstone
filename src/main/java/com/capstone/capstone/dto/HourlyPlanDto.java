@@ -11,8 +11,8 @@ public class HourlyPlanDto {
 
     private int hour;
     private String essMode;
-    private double essPowerW;
-    private double gridUsageW;
+    private double essPower;
+    private double gridUsage;
     private double pvPriority;
 
     private List<TransferDto> transfer;

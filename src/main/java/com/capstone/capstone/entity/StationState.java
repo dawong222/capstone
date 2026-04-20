@@ -11,7 +11,7 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
-public class StationStateLog {
+public class StationState {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -24,13 +24,13 @@ public class StationStateLog {
     @JoinColumn(name = "schedule_job_id")
     private ScheduleJob scheduleJob;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_id")
     private ChargingStation station;
 
     @OneToOne(mappedBy = "stationState", cascade = CascadeType.ALL)
-    private PowerMetricsLog powerMetrics;
+    private PowerMetrics powerMetrics;
 
     @OneToMany(mappedBy = "stationState", cascade = CascadeType.ALL)
-    private List<ChargerStateLog> chargerStates;
+    private List<ChargerState> chargerStates;
 }

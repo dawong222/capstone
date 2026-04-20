@@ -15,8 +15,7 @@ public class Transfer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "power_w")
-    private Double powerW;
+    private Double power;
     private Long targetStationId;
 
     @ManyToOne(fetch = FetchType.LAZY)

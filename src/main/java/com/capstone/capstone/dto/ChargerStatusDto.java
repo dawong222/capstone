@@ -5,8 +5,7 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public class TransferDto {
+public class ChargerStatusDto {
+    private int chargeId;
 
-    private Long targetStationId;
-    private double power;
 }

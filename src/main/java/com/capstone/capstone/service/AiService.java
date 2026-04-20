@@ -1,6 +1,7 @@
 package com.capstone.capstone.service;
 
 import com.capstone.capstone.dto.AiRequestDto;
+import com.capstone.capstone.dto.AiResponseDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -16,20 +17,20 @@ public class AiService {
     @Value("${ai.server.url}")
     private String AI_URL;
 
-    public void requestSchedule(AiRequestDto requestDto) {
+    public AiResponseDto requestSchedule(AiRequestDto requestDto) {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         HttpEntity<AiRequestDto> entity = new HttpEntity<>(requestDto, headers);
 
-        ResponseEntity<String> response = restTemplate.exchange(
+        ResponseEntity<AiResponseDto> response = restTemplate.exchange(
                 AI_URL,
                 HttpMethod.POST,
                 entity,
-                String.class
+                AiResponseDto.class
         );
 
-        System.out.println("AI 응답: " + response.getBody());
+        return response.getBody();
     }
 }

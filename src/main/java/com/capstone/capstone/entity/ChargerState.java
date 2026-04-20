@@ -9,19 +9,18 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class ChargerStateLog {
+public class ChargerState {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "power_demand_w")
-    private Double powerDemandW;
+    private Double powerDemand;
     private Boolean isActive;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_state_id")
-    private StationStateLog stationState;
+    private StationState stationState;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "charger_id")

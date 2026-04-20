@@ -9,24 +9,19 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class PowerMetricsLog {
+public class PowerMetrics {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "p_pv_w")
-    private Double pPvW;
-    @Column(name = "p_load_w")
-    private Double pLoadW;
-    @Column(name = "p_ess_w")
-    private Double pEssW;
-    @Column(name = "p_grid_w")
-    private Double pGridW;
-    @Column(name = "p_tr_w")
-    private Double pTrW;
+    private Double pPv;
+    private Double pLoad;
+    private Double pEss;
+    private Double pGrid;
+    private Double pTr;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_state_id", unique = true)
-    private StationStateLog stationState;
+    private StationState stationState;
 }
