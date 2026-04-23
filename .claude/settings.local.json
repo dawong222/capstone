@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew compileJava *)",
+      "Bash(where java *)",
+      "Read(//c/Program Files/Java/**)",
+      "Read(//c/Program Files/**)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-24\" ./gradlew compileJava *)",
+      "Bash(echo \"org.gradle.java.installations.paths=C:\\\\\\\\\\\\\\\\Program Files\\\\\\\\\\\\\\\\Java\\\\\\\\\\\\\\\\jdk-24\")",
+      "PowerShell(docker version *)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-24\" ./gradlew bootJar *)",
+      "Bash(chmod 400 \"/c/Users/user/.ssh/capstone_key_01.pem\")",
+      "Bash(ssh *)",
+      "Bash(scp *)"
+    ]
+  }
+}

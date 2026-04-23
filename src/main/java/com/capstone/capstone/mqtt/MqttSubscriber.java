@@ -1,24 +1,23 @@
 package com.capstone.capstone.mqtt;
 
+import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
 import com.capstone.capstone.service.DataProcessingService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Service;
 
+@Slf4j
 @Component
+@RequiredArgsConstructor
 public class MqttSubscriber {
 
     private final DataProcessingService service;
 
-    public MqttSubscriber(DataProcessingService service) {
-        this.service = service;
-    }
-
     @ServiceActivator(inputChannel = "mqttInputChannel")
-    //mqttInputChannel로 들어온 메시지를 이 메서드로 전달
-    public void handleMessage(String payload){
-        service.process(payload);
+    public void handleMessage(String payload) {
+        log.info("[MQTT RAW] {}", payload);
+        MqttPayloadDto parsed = service.process(payload);
+        log.info("[MQTT 파싱 완료] 스테이션 {}개", parsed.getStations() != null ? parsed.getStations().size() : 0);
     }
-
-
 }

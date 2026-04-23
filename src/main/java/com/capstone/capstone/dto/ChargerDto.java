@@ -10,5 +10,5 @@ public class ChargerDto {
     private Long chargerId;
     private String type;
     private double powerDemand;
-    private boolean isActive;
+    private Boolean active;
 }

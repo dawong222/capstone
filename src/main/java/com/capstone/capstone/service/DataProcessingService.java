@@ -1,74 +1,89 @@
 package com.capstone.capstone.service;
 
-
-import com.capstone.capstone.dto.AiRequestDto;
-import com.capstone.capstone.dto.ChargerStatusDto;
-import com.capstone.capstone.dto.IoTDataDto;
-import com.capstone.capstone.dto.StationDto;
-import com.capstone.capstone.entity.Charger;
-import com.capstone.capstone.entity.ChargingStation;
-import com.capstone.capstone.entity.PowerMetrics;
-import com.capstone.capstone.entity.StationState;
-import com.capstone.capstone.repository.ChargerRepository;
-import com.capstone.capstone.repository.ChargingStationRepository;
-import com.capstone.capstone.repository.PowerMetricsRepository;
+import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
+import com.capstone.capstone.dto.mqtt.MqttStationDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DataProcessingService {
-    //IoT 기기에서 받은 JSON 데이터를 DB에 저장
 
     private final ObjectMapper objectMapper;
-    private final ChargingStationRepository repository;
 
-    public DataProcessingService(ObjectMapper objectMapper, ChargingStationRepository repository) {
-        this.objectMapper = objectMapper;
-        this.repository =  repository;
-    }
+    // 최신 MQTT 데이터 (스레드 안전)
+    private final AtomicReference<MqttPayloadDto> latestData = new AtomicReference<>();
 
-    private final SchedulingService schedulingService; // 다음 단계 연결용
+    // SSE 구독자 목록 (스레드 안전)
+    private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
-    public void process(String payload) {
+    public MqttPayloadDto process(String payload) {
+        try {
+            MqttPayloadDto data = objectMapper.readValue(payload, MqttPayloadDto.class);
 
-        try{
-            AiRequestDto request = objectMapper.readValue(payload, AiRequestDto.class);
-            //JSON -> AiRequestDTO
-            for (StationDto stationDto : request.getStations()) {
-                ChargingStation station = toEntity(stationDto);
-                repository.save(station);
+            log.info("[MQTT 수신] 스테이션 수={}", data.getStations() != null ? data.getStations().size() : 0);
+
+            if (data.getStations() != null) {
+                for (MqttStationDto s : data.getStations()) {
+                    log.info("  └ stationId={}, soc={}, pLoad={}, pPv={}, active={}",
+                            s.getHeader().getStationId(),
+                            s.getPayload().getStateOfCharge().getSoc(),
+                            s.getPayload().getPowerMetricsW().getPLoad(),
+                            s.getPayload().getPowerMetricsW().getPPv(),
+                            s.getStatus().isActive());
+                }
             }
-        }catch (JsonProcessingException e){
-            throw new RuntimeException("JSON 파싱 실패",e);
+
+            latestData.set(data);
+            broadcast(data);
+
+            return data;
+
+        } catch (JsonProcessingException e) {
+            log.error("[MQTT 파싱 실패] error={}", e.getMessage());
+            throw new RuntimeException("JSON 파싱 실패", e);
         }
     }
 
-    private ChargingStation toEntity(StationDto stationDto) {
-        Long id = (long) stationDto.getStationId();
+    public MqttPayloadDto getLatestData() {
+        return latestData.get();
+    }
 
-        ChargingStation station = repository.findById(id).orElse(new ChargingStation());
+    public void addEmitter(SseEmitter emitter) {
+        emitters.add(emitter);
+        emitter.onCompletion(() -> emitters.remove(emitter));
+        emitter.onTimeout(() -> emitters.remove(emitter));
+        emitter.onError(e -> emitters.remove(emitter));
 
-        station.setId(id);
+        // 연결 즉시 최신 데이터 전송
+        MqttPayloadDto current = latestData.get();
+        if (current != null) {
+            sendToEmitter(emitter, current);
+        }
+    }
 
-        StationState state = new StationState();
+    private void broadcast(MqttPayloadDto data) {
+        for (SseEmitter emitter : emitters) {
+            sendToEmitter(emitter, data);
+        }
+    }
 
-        state.setStation(station);
-        state.setSoc(stationDto.getCurrentState().getSoc());
-
-        PowerMetrics power = new PowerMetrics();
-        power.setPPv(stationDto.getCurrentState().getPower().getPPv());
-        power.setPLoad(stationDto.getCurrentState().getPower().getPLoad());
-        power.setPEss(stationDto.getCurrentState().getPower().getPEss());
-        power.setPGrid(stationDto.getCurrentState().getPower().getPGrid());
-        power.setPTr(stationDto.getCurrentState().getPower().getPTr());
-
-        state.setTimestamp()
-
+    private void sendToEmitter(SseEmitter emitter, MqttPayloadDto data) {
+        try {
+            String json = objectMapper.writeValueAsString(data);
+            emitter.send(SseEmitter.event().name("telemetry").data(json));
+        } catch (IOException e) {
+            emitters.remove(emitter);
+        }
     }
 }
-
-
