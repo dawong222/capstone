@@ -12,6 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -67,5 +71,75 @@ public class SchedulingService {
 
         log.info("[스케줄 저장 완료] requestId={}, 스테이션 수={}",
                 dto.getRequestId(), dto.getStationDayAheadSchedule().size());
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<ScheduleResponseDto> getScheduleByDate(LocalDate date) {
+        return scheduleJobRepository.findByScheduleTargetDate(date)
+                .map(this::toScheduleResponseDto);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ScheduleHistoryItemDto> getScheduleHistory() {
+        return scheduleJobRepository.findTop10ByOrderByCreatedAtDesc().stream()
+                .map(this::toHistoryItemDto)
+                .collect(Collectors.toList());
+    }
+
+    private ScheduleResponseDto toScheduleResponseDto(ScheduleJob job) {
+        ScheduleResponseDto dto = new ScheduleResponseDto();
+        dto.setRequestId(job.getRequestId());
+        dto.setTargetDate(job.getScheduleTargetDate().toString());
+        dto.setCreatedAt(job.getCreatedAt().toString());
+        dto.setStatus(job.getStatus());
+
+        List<StationScheduleResponseDto> stations = scheduleResultRepository
+                .findByScheduleJobId(job.getId()).stream()
+                .map(this::toStationScheduleResponseDto)
+                .collect(Collectors.toList());
+        dto.setStations(stations);
+        return dto;
+    }
+
+    private StationScheduleResponseDto toStationScheduleResponseDto(ScheduleResult result) {
+        StationScheduleResponseDto dto = new StationScheduleResponseDto();
+        dto.setStationId(result.getStation().getId());
+        dto.setStationName(result.getStation().getName());
+
+        List<HourlyPlanDto> plans = result.getHourlyPlans().stream()
+                .map(this::toHourlyPlanDto)
+                .sorted(Comparator.comparingInt(HourlyPlanDto::getHour))
+                .collect(Collectors.toList());
+        dto.setHourlyPlan(plans);
+        return dto;
+    }
+
+    private HourlyPlanDto toHourlyPlanDto(HourlyPlan plan) {
+        HourlyPlanDto dto = new HourlyPlanDto();
+        dto.setHour(plan.getHour());
+        dto.setEssMode(plan.getEssMode());
+        dto.setEssPower(plan.getEssPower());
+        dto.setGridUsage(plan.getGridUsage());
+        dto.setPvPriority(plan.getPvPriority());
+
+        List<TransferDto> transfers = plan.getTransfers().stream()
+                .map(t -> {
+                    TransferDto td = new TransferDto();
+                    td.setTargetStationId(t.getTargetStationId());
+                    td.setPower(t.getPower());
+                    return td;
+                })
+                .collect(Collectors.toList());
+        dto.setTransfer(transfers);
+        return dto;
+    }
+
+    private ScheduleHistoryItemDto toHistoryItemDto(ScheduleJob job) {
+        ScheduleHistoryItemDto dto = new ScheduleHistoryItemDto();
+        dto.setRequestId(job.getRequestId());
+        dto.setTargetDate(job.getScheduleTargetDate().toString());
+        dto.setCreatedAt(job.getCreatedAt().toString());
+        dto.setStatus(job.getStatus());
+        return dto;
     }
 }
