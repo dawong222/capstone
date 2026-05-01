@@ -12,15 +12,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Comparator;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -84,6 +84,13 @@ public class SchedulingService {
         request.setScheduleHorizonHours("24");
         request.setClusterState(buildClusterState());
         request.setStations(buildStations(latest));
+        Map<String, Object> weather = new HashMap<>();
+
+        weather.put("historyRaw", getHistoryRaw());
+// 나중에
+// weather.put("forecastRaw", getForecastRaw());
+
+        request.setWeather(weather);
         return request;
     }
 
@@ -332,5 +339,70 @@ public class SchedulingService {
         dto.setCreatedAt(job.getCreatedAt().toString());
         dto.setStatus(job.getStatus());
         return dto;
+    }
+
+    public String callAsosApi() {
+
+        String url = UriComponentsBuilder
+                .fromUriString("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList")
+                .queryParam("serviceKey", "YOUR_KEY")
+                .queryParam("numOfRows", "999")
+                .queryParam("pageNo", "1")
+                .queryParam("dataType", "JSON")
+                .queryParam("dataCd", "ASOS")
+                .queryParam("dateCd", "HR")
+                .queryParam("startDt", "20260424")
+                .queryParam("startHh", "00")
+                .queryParam("endDt", "20260501")
+                .queryParam("endHh", "23")
+                .queryParam("stnIds", "108")
+                .build(true)
+                .toUriString();
+
+        RestTemplate restTemplate = new RestTemplate();
+        return restTemplate.getForObject(url, String.class);
+    }
+
+
+    public List<Map<String, String>> parseAsosJson(String json) throws Exception {
+
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode root = mapper.readTree(json);
+
+        JsonNode items = root
+                .path("response")
+                .path("body")
+                .path("items")
+                .path("item");
+
+        List<Map<String, String>> result = new ArrayList<>();
+
+        for (JsonNode node : items) {
+
+            Map<String, String> row = new HashMap<>();
+
+            row.put("tm", node.path("tm").asText());
+            row.put("ta", node.path("ta").asText());
+            row.put("hm", node.path("hm").asText());
+            row.put("ws", node.path("ws").asText());
+            row.put("wd", node.path("wd").asText());
+            row.put("rn", node.path("rn").asText());
+            row.put("si", node.path("icsr").asText()); // 🔥 일사량
+
+            result.add(row);
+        }
+
+        return result;
+    }
+
+    public List<Map<String, String>> getHistoryRaw() {
+
+        try {
+            String json = callAsosApi();
+            return parseAsosJson(json);
+
+        } catch (Exception e) {
+            throw new RuntimeException("ASOS API 호출 실패", e);
+        }
     }
 }
