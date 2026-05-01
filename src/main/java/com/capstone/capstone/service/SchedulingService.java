@@ -16,16 +16,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-<<<<<<< HEAD
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-=======
 import java.util.Comparator;
-import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
->>>>>>> 18bc6ccc6f33932ea608a3d64fd811712713c80e
 
 @Slf4j
 @Service
