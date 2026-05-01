@@ -19,12 +19,12 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class HourlyDataService {
+public class SchedulingService {
 
     private final HourlySnapshotRepository snapshotRepository;
     private final DataProcessingService dataProcessingService;
     private final AiService aiService;
-    private final SchedulingService schedulingService;
+    private final SchedulingService2 schedulingService;
 
     @Scheduled(cron = "0 0 * * * *") // 매 정각
     public void saveHourlySnapshot() {
