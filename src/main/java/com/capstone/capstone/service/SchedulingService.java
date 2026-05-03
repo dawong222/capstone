@@ -573,6 +573,264 @@ public class SchedulingService {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Raw Map 방식 AI 요청 (전처리 없이 날것 데이터 그대로 전송)
+    // ─────────────────────────────────────────────────────────────
+
+    public Map<String, Object> buildRawAiRequest() {
+        LocalDate d = LocalDate.now();
+        LocalDate targetDate = d.plusDays(1);
+        ZonedDateTime callTime = ZonedDateTime.now(KST);
+        DateTimeFormatter iso = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+        String startDt   = d.minusDays(7).format(DateTimeFormatter.BASIC_ISO_DATE);
+        String endDt     = d.format(DateTimeFormatter.BASIC_ISO_DATE);
+        String baseDate  = endDt;
+
+        // 충전소 목록 (MQTT stationId 순서 기준)
+        List<ChargingStation> allStations = stationRepository.findAll();
+        allStations.sort(Comparator.comparing(ChargingStation::getId));
+        Map<Integer, String> nameMap = new HashMap<>();
+        for (int i = 0; i < allStations.size(); i++) nameMap.put(i, allStations.get(i).getName());
+
+        // 과거 스냅샷 (D-7 00:00 ~ D 21:00)
+        List<HourlySnapshot> snapshots = snapshotRepository.findByRecordedAtBetweenOrderByRecordedAt(
+                d.minusDays(7).atStartOfDay(), d.atTime(21, 0, 0));
+
+        Map<String, Object> req = new LinkedHashMap<>();
+
+        // ── 메타 ──────────────────────────────────────────────────
+        req.put("request_id", String.format("schedule-forecast-%s-%s-0001",
+                d.format(DateTimeFormatter.ofPattern("yyyyMMdd")),
+                callTime.format(DateTimeFormatter.ofPattern("HHmmss"))));
+        req.put("request_timestamp", callTime.format(iso));
+        req.put("schedule_target_date", targetDate.toString());
+        req.put("schedule_horizon_hours", 24);
+
+        Map<String, Object> window = new LinkedHashMap<>();
+        window.put("start", targetDate.atStartOfDay(KST).format(iso));
+        window.put("end",   targetDate.plusDays(1).atStartOfDay(KST).format(iso));
+        window.put("slot_unit",  "hour");
+        window.put("slot_count", 24);
+        window.put("slot_definition", "slot 0 = 00:00~01:00, slot 23 = 23:00~24:00");
+        req.put("target_window", window);
+
+        // ── 수요 과거 (DB 스냅샷) ──────────────────────────────────
+        List<Map<String, Object>> demandPast = new ArrayList<>();
+        for (HourlySnapshot s : snapshots) {
+            ZonedDateTime st = s.getRecordedAt().atZone(KST);
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("tm",           st.format(iso));
+            item.put("station_name", nameMap.getOrDefault(s.getStationId(), "station-" + s.getStationId()));
+            item.put("slot_start",   st.format(iso));
+            item.put("slot_end",     st.plusHours(1).format(iso));
+            item.put("demand_kwh",   s.getPLoad() != null ? s.getPLoad() / 1000.0 : 0.0);
+            demandPast.add(item);
+        }
+        req.put("demand_past_demand_hourly", demandPast);
+
+        // ── 수요 과거 날씨 (ASOS 108 서울) ───────────────────────
+        req.put("demand_past_weather_hourly", fetchRawAsosItems("108", startDt, endDt));
+
+        // ── 수요 단기예보 (강남구 nx=61, ny=125) ──────────────────
+        req.put("demand_forecast_short_term_hourly", fetchRawForecastItems(61, 125, baseDate, targetDate));
+
+        // ── PV 과거 발전량 (stationId=0 기준 50kW PV) ────────────
+        List<Map<String, Object>> pvPast = new ArrayList<>();
+        for (HourlySnapshot s : snapshots) {
+            if (s.getStationId() == null || s.getStationId() != 0) continue;
+            ZonedDateTime st = s.getRecordedAt().atZone(KST);
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("tm",         st.format(iso));
+            item.put("slot_start", st.format(iso));
+            item.put("slot_end",   st.plusHours(1).format(iso));
+            item.put("gen_kwh",    s.getPPv() != null ? s.getPPv() / 1000.0 : 0.0);
+            pvPast.add(item);
+        }
+        req.put("pv_past_generation_hourly", pvPast);
+
+        // ── PV 과거 날씨 (ASOS 129 서산) ─────────────────────────
+        req.put("pv_past_weather_hourly", fetchRawAsosItems("129", startDt, endDt));
+
+        // ── PV 단기예보 (서산 nx=68, ny=100) ─────────────────────
+        req.put("pv_forecast_short_term_hourly", fetchRawForecastItems(68, 100, baseDate, targetDate));
+
+        // ── 충전소 현재 상태 (MQTT) ───────────────────────────────
+        req.put("station_current_states", buildRawStationStates(allStations, callTime, iso));
+
+        // ── TOU 전기요금 (D+1 24슬롯) ─────────────────────────────
+        List<Map<String, Object>> tou = new ArrayList<>();
+        for (int slot = 0; slot < 24; slot++) {
+            ZonedDateTime st = targetDate.atTime(slot, 0).atZone(KST);
+            String level; double price;
+            if (slot >= 23 || slot < 9)                              { level = "off_peak";  price = 93.3;  }
+            else if ((slot >= 10 && slot < 12) || (slot >= 13 && slot < 17)) { level = "on_peak";   price = 229.5; }
+            else                                                      { level = "mid_peak";  price = 146.9; }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("slot", slot);
+            row.put("time_start", st.format(iso));
+            row.put("time_end",   st.plusHours(1).format(iso));
+            row.put("tou_level",  level);
+            row.put("price_krw_per_kwh", price);
+            tou.add(row);
+        }
+        req.put("tou_price_hourly", tou);
+
+        // ── 계통/ESS/토폴로지 (고정값) ───────────────────────────
+        req.put("grid_constraints", Map.of(
+                "cluster_grid_limit_kw", 500.0,
+                "station_grid_limit_kw", 120.0,
+                "peak_limit_kw",         500.0));
+
+        req.put("ess_constraints", Map.of(
+                "ess_capacity_kwh_per_station", 100.0,
+                "ess_min_soc",           0.1,
+                "ess_max_soc",           0.9,
+                "ess_max_charge_kw",     50.0,
+                "ess_max_discharge_kw",  50.0,
+                "round_trip_efficiency", 0.85));
+
+        List<String> stationOrder = allStations.stream().map(ChargingStation::getName).toList();
+        req.put("transfer_topology", Map.of(
+                "transfer_enabled", true,
+                "station_order", stationOrder,
+                "adjacency_matrix_5x5", List.of(
+                        List.of(0,1,1,0,0), List.of(1,0,1,1,0), List.of(1,1,0,1,1),
+                        List.of(0,1,1,0,1), List.of(0,0,1,1,0)),
+                "transfer_capacity_kw_matrix_5x5", List.of(
+                        List.of(0,50,50,0,0), List.of(50,0,50,50,0), List.of(50,50,0,50,50),
+                        List.of(0,50,50,0,50), List.of(0,0,50,50,0)),
+                "transfer_loss_rate_matrix_5x5", List.of(
+                        List.of(0.0,0.02,0.02,0.0,0.0), List.of(0.02,0.0,0.02,0.02,0.0),
+                        List.of(0.02,0.02,0.0,0.02,0.02), List.of(0.0,0.02,0.02,0.0,0.02),
+                        List.of(0.0,0.0,0.02,0.02,0.0))));
+
+        return req;
+    }
+
+    private List<Map<String, Object>> fetchRawAsosItems(String stnIds, String startDt, String endDt) {
+        String url = UriComponentsBuilder
+                .fromUriString("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList")
+                .queryParam("serviceKey", asosKey)
+                .queryParam("numOfRows", 300)
+                .queryParam("pageNo", 1)
+                .queryParam("dataType", "JSON")
+                .queryParam("dataCd", "ASOS")
+                .queryParam("dateCd", "HR")
+                .queryParam("startDt", startDt)
+                .queryParam("startHh", "00")
+                .queryParam("endDt", endDt)
+                .queryParam("endHh", "22")
+                .queryParam("stnIds", stnIds)
+                .build(true)
+                .toUriString();
+
+        try {
+            String json = restTemplate.getForObject(url, String.class);
+            JsonNode items = objectMapper.readTree(json)
+                    .path("response").path("body").path("items").path("item");
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (JsonNode n : items) {
+                result.add(objectMapper.convertValue(n, Map.class));
+            }
+            log.info("[ASOS raw] stnIds={} → {}건", stnIds, result.size());
+            return result;
+        } catch (Exception e) {
+            log.warn("[ASOS raw 실패] stnIds={} : {}", stnIds, e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    private List<Map<String, Object>> fetchRawForecastItems(int nx, int ny, String baseDate, LocalDate targetDate) {
+        String url = UriComponentsBuilder
+                .fromUriString("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst")
+                .queryParam("serviceKey", forecastKey)
+                .queryParam("numOfRows", 1500)
+                .queryParam("pageNo", 1)
+                .queryParam("dataType", "JSON")
+                .queryParam("base_date", baseDate)
+                .queryParam("base_time", "2000")
+                .queryParam("nx", nx)
+                .queryParam("ny", ny)
+                .build(true)
+                .toUriString();
+
+        try {
+            String json = restTemplate.getForObject(url, String.class);
+            JsonNode root = objectMapper.readTree(json);
+
+            String rc = root.path("response").path("header").path("resultCode").asText();
+            if (!"00".equals(rc)) {
+                log.warn("[단기예보 raw] nx={},ny={} resultCode={} → 빈 배열 반환 (승인 필요할 수 있음)", nx, ny, rc);
+                return new ArrayList<>();
+            }
+
+            JsonNode items = root.path("response").path("body").path("items").path("item");
+            DateTimeFormatter dateFmt = DateTimeFormatter.BASIC_ISO_DATE;
+            LocalDate targetEnd = targetDate.plusDays(1); // D+2
+
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (JsonNode n : items) {
+                String fcstDate = n.path("fcstDate").asText();
+                try {
+                    LocalDate day = LocalDate.parse(fcstDate, dateFmt);
+                    if (day.isBefore(targetDate) || day.isAfter(targetEnd)) continue;
+                } catch (Exception ignored) { continue; }
+                result.add(objectMapper.convertValue(n, Map.class));
+            }
+            log.info("[단기예보 raw] nx={},ny={} → {}건", nx, ny, result.size());
+            return result;
+        } catch (Exception e) {
+            log.warn("[단기예보 raw 실패] nx={},ny={} : {}", nx, ny, e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    private List<Map<String, Object>> buildRawStationStates(
+            List<ChargingStation> allStations, ZonedDateTime callTime, DateTimeFormatter iso) {
+
+        MqttPayloadDto latest = dataProcessingService.getLatestData();
+        String ts = callTime.format(iso);
+        List<Map<String, Object>> states = new ArrayList<>();
+
+        for (int i = 0; i < allStations.size(); i++) {
+            ChargingStation station = allStations.get(i);
+            Map<String, Object> state = new LinkedHashMap<>();
+            state.put("station_id",   i);
+            state.put("station_name", station.getName());
+            state.put("timestamp",    ts);
+            state.put("error_code",   0);
+
+            boolean hasMqtt = latest != null && latest.getStations() != null
+                    && i < latest.getStations().size();
+
+            if (hasMqtt) {
+                MqttStationDto m = latest.getStations().get(i);
+                state.put("is_physical", m.getHeader().isPhysical());
+                state.put("ess_soc", m.getPayload().getStateOfCharge().getSoc());
+
+                List<Map<String, Object>> chargers = new ArrayList<>();
+                for (MqttChargerStatusDto cs : m.getPayload().getChargerStatus()) {
+                    Map<String, Object> cd = new LinkedHashMap<>();
+                    cd.put("charger_id",       String.format("ch-%03d", cs.getChargerId()));
+                    cd.put("charger_type",     "fast");
+                    cd.put("rated_power_kw",   100.0);
+                    cd.put("is_active",        cs.isHasDemand());
+                    cd.put("current_power_kw", cs.isHasDemand() ? 7.0 : 0.0);
+                    chargers.add(cd);
+                }
+                state.put("charger_count", chargers.size());
+                state.put("chargers", chargers);
+            } else {
+                state.put("is_physical",   true);
+                state.put("ess_soc",       0.5);
+                state.put("charger_count", 0);
+                state.put("chargers",      new ArrayList<>());
+            }
+            states.add(state);
+        }
+        return states;
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // 기상청 API 연동
     // ─────────────────────────────────────────────────────────────
 

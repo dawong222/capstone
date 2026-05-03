@@ -4,11 +4,15 @@ import com.capstone.capstone.dto.AiRequestDto;
 import com.capstone.capstone.dto.AiResponseDto;
 import com.capstone.capstone.dto.ai.ScheduleForecastRequestDto;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.Map;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AiService {
@@ -48,6 +52,24 @@ public class AiService {
                 AiResponseDto.class
         );
 
+        return response.getBody();
+    }
+
+    /** Raw Map 그대로 AI 서버에 POST, 응답은 String으로 받음 */
+    public String sendRaw(Map<String, Object> payload) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
+
+        log.info("[AI 서버 전송] url={}", AI_URL);
+        ResponseEntity<String> response = restTemplate.exchange(
+                AI_URL,
+                HttpMethod.POST,
+                entity,
+                String.class
+        );
+        log.info("[AI 서버 응답] status={}", response.getStatusCode());
         return response.getBody();
     }
 }
