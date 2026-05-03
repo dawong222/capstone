@@ -740,16 +740,19 @@ public class SchedulingService {
     }
 
     private List<Map<String, Object>> fetchRawForecastItems(int nx, int ny, String baseDate, LocalDate targetDate) {
+        String baseTime = computeLatestBaseTime();
+        log.info("[단기예보 raw] nx={},ny={} base_date={} base_time={}", nx, ny, baseDate, baseTime);
+
         String url = UriComponentsBuilder
-                .fromUriString("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst")
-                .queryParam("serviceKey", forecastKey)
-                .queryParam("numOfRows", 1500)
+                .fromUriString("https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0/getVilageFcst")
                 .queryParam("pageNo", 1)
+                .queryParam("numOfRows", 1500)
                 .queryParam("dataType", "JSON")
                 .queryParam("base_date", baseDate)
-                .queryParam("base_time", "2000")
+                .queryParam("base_time", baseTime)
                 .queryParam("nx", nx)
                 .queryParam("ny", ny)
+                .queryParam("authKey", forecastKey)
                 .build(true)
                 .toUriString();
 
@@ -757,9 +760,10 @@ public class SchedulingService {
             String json = restTemplate.getForObject(url, String.class);
             JsonNode root = objectMapper.readTree(json);
 
-            String rc = root.path("response").path("header").path("resultCode").asText();
+            String rc  = root.path("response").path("header").path("resultCode").asText();
+            String msg = root.path("response").path("header").path("resultMsg").asText();
             if (!"00".equals(rc)) {
-                log.warn("[단기예보 raw] nx={},ny={} resultCode={} → 빈 배열 반환 (승인 필요할 수 있음)", nx, ny, rc);
+                log.warn("[단기예보 raw] nx={},ny={} resultCode={} msg={}", nx, ny, rc, msg);
                 return new ArrayList<>();
             }
 
@@ -782,6 +786,25 @@ public class SchedulingService {
             log.warn("[단기예보 raw 실패] nx={},ny={} : {}", nx, ny, e.getMessage());
             return new ArrayList<>();
         }
+    }
+
+    /**
+     * 현재 시각 기준으로 조회 가능한 가장 최근 단기예보 base_time 반환.
+     * 단기예보는 02, 05, 08, 11, 14, 17, 20, 23시 발표 후 약 10분 뒤 조회 가능.
+     */
+    private String computeLatestBaseTime() {
+        ZonedDateTime now = ZonedDateTime.now(KST);
+        int totalMinutes = now.getHour() * 60 + now.getMinute();
+        // (발표시각 * 60 + 10분) 이 지났으면 해당 base_time 사용 가능
+        int[][] schedule = {{2,10},{5,10},{8,10},{11,10},{14,10},{17,10},{20,10},{23,10}};
+        String[] codes   = {"0200","0500","0800","1100","1400","1700","2000","2300"};
+        String result = "2300"; // 자정~02:10 사이: 전날 23:00 발표분
+        for (int i = 0; i < schedule.length; i++) {
+            if (totalMinutes >= schedule[i][0] * 60 + schedule[i][1]) {
+                result = codes[i];
+            }
+        }
+        return result;
     }
 
     private List<Map<String, Object>> buildRawStationStates(
@@ -921,15 +944,15 @@ public class SchedulingService {
             int nx, int ny, String baseDate, LocalDate targetDate, DateTimeFormatter iso) {
 
         String url = UriComponentsBuilder
-                .fromUriString("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst")
-                .queryParam("serviceKey", forecastKey)
-                .queryParam("numOfRows", 1500)
+                .fromUriString("https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0/getVilageFcst")
                 .queryParam("pageNo", 1)
+                .queryParam("numOfRows", 1500)
                 .queryParam("dataType", "JSON")
                 .queryParam("base_date", baseDate)
                 .queryParam("base_time", "2000")
                 .queryParam("nx", nx)
                 .queryParam("ny", ny)
+                .queryParam("authKey", forecastKey)
                 .build(true)
                 .toUriString();
 
