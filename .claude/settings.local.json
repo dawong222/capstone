@@ -14,7 +14,10 @@
       "Bash(scp *)",
       "Bash(./gradlew build *)",
       "Bash(xargs grep *)",
-      "Bash(docker build *)"
+      "Bash(docker build *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)"
     ]
   }
 }

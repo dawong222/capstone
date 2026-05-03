@@ -1,15 +1,18 @@
 package com.capstone.capstone.service;
 
 import com.capstone.capstone.dto.*;
+import com.capstone.capstone.dto.ai.*;
 import com.capstone.capstone.dto.mqtt.MqttChargerStatusDto;
 import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
 import com.capstone.capstone.dto.mqtt.MqttStationDto;
 import com.capstone.capstone.entity.*;
 import com.capstone.capstone.repository.ChargingStationRepository;
+import com.capstone.capstone.repository.HourlySnapshotRepository;
 import com.capstone.capstone.repository.ScheduleJobRepository;
 import com.capstone.capstone.repository.ScheduleResultRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
@@ -20,6 +23,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -32,8 +38,19 @@ public class SchedulingService {
     private final ScheduleJobRepository scheduleJobRepository;
     private final ChargingStationRepository stationRepository;
     private final ScheduleResultRepository scheduleResultRepository;
+    private final HourlySnapshotRepository snapshotRepository;
     private final DataProcessingService dataProcessingService;
     private final AiService aiService;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+
+    @Value("${weather.asos.key}")
+    private String asosKey;
+
+    @Value("${weather.forecast.key}")
+    private String forecastKey;
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     public AiRequestDto buildAiRequest() {
         MqttPayloadDto latest = dataProcessingService.getLatestData();
@@ -339,6 +356,432 @@ public class SchedulingService {
         dto.setCreatedAt(job.getCreatedAt().toString());
         dto.setStatus(job.getStatus());
         return dto;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // PDF 스펙 기반 AI 요청 빌더 (기상청 미연동 → weather 필드 빈 배열)
+    // ─────────────────────────────────────────────────────────────
+
+    public ScheduleForecastRequestDto buildScheduleForecastRequest() {
+        LocalDate d = LocalDate.now();
+        LocalDate targetDate = d.plusDays(1);
+        ZonedDateTime callTime = ZonedDateTime.now(KST);
+        DateTimeFormatter iso = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("yyyyMMdd");
+        DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HHmmss");
+
+        ScheduleForecastRequestDto req = new ScheduleForecastRequestDto();
+        req.setRequestId(String.format("schedule-forecast-%s-%s-0001",
+                d.format(dateFmt), callTime.format(timeFmt)));
+        req.setRequestTimestamp(callTime.format(iso));
+        req.setScheduleTargetDate(targetDate.toString());
+        req.setScheduleHorizonHours(24);
+
+        TargetWindowDto window = new TargetWindowDto();
+        window.setStart(targetDate.atStartOfDay(KST).format(iso));
+        window.setEnd(targetDate.plusDays(1).atStartOfDay(KST).format(iso));
+        window.setSlotUnit("hour");
+        window.setSlotCount(24);
+        window.setSlotDefinition("slot 0 = 00:00~01:00, slot 23 = 23:00~24:00");
+        req.setTargetWindow(window);
+
+        // 충전소 ID → 이름 맵 (MQTT stationId 순서 기준)
+        List<ChargingStation> allStations = stationRepository.findAll();
+        allStations.sort(Comparator.comparing(ChargingStation::getId));
+        Map<Integer, String> stationNameMap = new HashMap<>();
+        for (int i = 0; i < allStations.size(); i++) {
+            stationNameMap.put(i, allStations.get(i).getName());
+        }
+
+        // 과거 스냅샷 조회 (D-7 00:00 ~ D 21:00)
+        LocalDateTime rangeStart = d.minusDays(7).atStartOfDay();
+        LocalDateTime rangeEnd = d.atTime(21, 0, 0);
+        List<HourlySnapshot> snapshots =
+                snapshotRepository.findByRecordedAtBetweenOrderByRecordedAt(rangeStart, rangeEnd);
+
+        String startDt = d.minusDays(7).format(DateTimeFormatter.BASIC_ISO_DATE);
+        String endDt   = d.format(DateTimeFormatter.BASIC_ISO_DATE);
+        String baseDateFmt = d.format(DateTimeFormatter.BASIC_ISO_DATE);
+
+        req.setDemandPastDemandHourly(buildDemandPastDemand(snapshots, stationNameMap, iso));
+        req.setDemandPastWeatherHourly(fetchAsosWeather("108", startDt, endDt, iso));
+        req.setDemandForecastShortTermHourly(fetchVilageFcst(61, 125, baseDateFmt, targetDate, iso));
+        req.setPvPastGenerationHourly(buildPvPastGeneration(snapshots, iso));
+        req.setPvPastWeatherHourly(fetchAsosWeather("129", startDt, endDt, iso));
+        req.setPvForecastShortTermHourly(fetchVilageFcst(68, 100, baseDateFmt, targetDate, iso));
+        req.setStationCurrentStates(buildStationCurrentStates(allStations, callTime, iso));
+        req.setTouPriceHourly(buildTouPriceHourly(targetDate, iso));
+        req.setGridConstraints(buildGridConstraints());
+        req.setEssConstraints(buildEssConstraints());
+        req.setTransferTopology(buildTransferTopology(allStations));
+
+        return req;
+    }
+
+    private List<DemandPastDemandItemDto> buildDemandPastDemand(
+            List<HourlySnapshot> snapshots, Map<Integer, String> nameMap,
+            DateTimeFormatter iso) {
+
+        List<DemandPastDemandItemDto> items = new ArrayList<>();
+        for (HourlySnapshot s : snapshots) {
+            String name = nameMap.getOrDefault(s.getStationId(), "Station-" + s.getStationId());
+            ZonedDateTime slotStart = s.getRecordedAt().atZone(KST);
+            String tm = slotStart.format(iso);
+            String slotEnd = slotStart.plusHours(1).format(iso);
+            double demandKwh = s.getPLoad() != null ? s.getPLoad() / 1000.0 : 0.0;
+            items.add(new DemandPastDemandItemDto(tm, name, tm, slotEnd, demandKwh));
+        }
+        return items;
+    }
+
+    private List<PvPastGenerationItemDto> buildPvPastGeneration(
+            List<HourlySnapshot> snapshots, DateTimeFormatter iso) {
+
+        // 충전소 1개(stationId=0) 50kW PV 기준
+        List<PvPastGenerationItemDto> items = new ArrayList<>();
+        snapshots.stream()
+                .filter(s -> s.getStationId() != null && s.getStationId() == 0)
+                .forEach(s -> {
+                    ZonedDateTime slotStart = s.getRecordedAt().atZone(KST);
+                    String tm = slotStart.format(iso);
+                    String slotEnd = slotStart.plusHours(1).format(iso);
+                    double genKwh = s.getPPv() != null ? s.getPPv() / 1000.0 : 0.0;
+                    items.add(new PvPastGenerationItemDto(tm, tm, slotEnd, genKwh));
+                });
+        return items;
+    }
+
+    private List<StationCurrentStateItemDto> buildStationCurrentStates(
+            List<ChargingStation> allStations, ZonedDateTime callTime, DateTimeFormatter iso) {
+
+        MqttPayloadDto latest = dataProcessingService.getLatestData();
+        String timestamp = callTime.format(iso);
+        List<StationCurrentStateItemDto> states = new ArrayList<>();
+
+        for (int i = 0; i < allStations.size(); i++) {
+            ChargingStation station = allStations.get(i);
+            StationCurrentStateItemDto state = new StationCurrentStateItemDto();
+            state.setStationId(i);
+            state.setStationName(station.getName());
+            state.setPhysical(true);
+            state.setTimestamp(timestamp);
+            state.setErrorCode(0);
+
+            boolean hasMqtt = latest != null && latest.getStations() != null
+                    && i < latest.getStations().size();
+
+            if (hasMqtt) {
+                MqttStationDto mqttStation = latest.getStations().get(i);
+                state.setPhysical(mqttStation.getHeader().isPhysical());
+                state.setEssSoc(mqttStation.getPayload().getStateOfCharge().getSoc());
+
+                List<MqttChargerStatusDto> csList = mqttStation.getPayload().getChargerStatus();
+                state.setChargerCount(csList.size());
+
+                List<ChargerStateItemDto> chargers = new ArrayList<>();
+                for (MqttChargerStatusDto cs : csList) {
+                    ChargerStateItemDto cd = new ChargerStateItemDto();
+                    cd.setChargerId(String.format("ch-%03d", cs.getChargerId()));
+                    cd.setChargerType("fast");
+                    cd.setRatedPowerKw(100.0);
+                    cd.setActive(cs.isHasDemand());
+                    cd.setCurrentPowerKw(cs.isHasDemand() ? 7.0 : 0.0);
+                    chargers.add(cd);
+                }
+                state.setChargers(chargers);
+            } else {
+                state.setEssSoc(0.5);
+                state.setChargerCount(0);
+                state.setChargers(new ArrayList<>());
+            }
+
+            states.add(state);
+        }
+        return states;
+    }
+
+    private List<TouPriceItemDto> buildTouPriceHourly(LocalDate targetDate, DateTimeFormatter iso) {
+        List<TouPriceItemDto> prices = new ArrayList<>();
+        for (int slot = 0; slot < 24; slot++) {
+            ZonedDateTime start = targetDate.atTime(slot, 0).atZone(KST);
+            ZonedDateTime end = start.plusHours(1);
+
+            // 한국전력 고압A 갑 I 봄/가을 기준 TOU
+            String level;
+            double price;
+            if (slot >= 23 || slot < 9) {
+                level = "off_peak";
+                price = 93.3;
+            } else if ((slot >= 10 && slot < 12) || (slot >= 13 && slot < 17)) {
+                level = "on_peak";
+                price = 229.5;
+            } else {
+                level = "mid_peak";
+                price = 146.9;
+            }
+
+            prices.add(new TouPriceItemDto(slot, start.format(iso), end.format(iso), level, price));
+        }
+        return prices;
+    }
+
+    private GridConstraintsDto buildGridConstraints() {
+        GridConstraintsDto grid = new GridConstraintsDto();
+        grid.setClusterGridLimitKw(500.0);
+        grid.setStationGridLimitKw(120.0);
+        grid.setPeakLimitKw(500.0);
+        return grid;
+    }
+
+    private EssConstraintsDto buildEssConstraints() {
+        EssConstraintsDto ess = new EssConstraintsDto();
+        ess.setEssCapacityKwhPerStation(100.0);
+        ess.setEssMinSoc(0.1);
+        ess.setEssMaxSoc(0.9);
+        ess.setEssMaxChargeKw(50.0);
+        ess.setEssMaxDischargeKw(50.0);
+        ess.setRoundTripEfficiency(0.85);
+        return ess;
+    }
+
+    private TransferTopologyDto buildTransferTopology(List<ChargingStation> allStations) {
+        TransferTopologyDto topology = new TransferTopologyDto();
+        topology.setTransferEnabled(true);
+        topology.setStationOrder(allStations.stream().map(ChargingStation::getName).toList());
+        topology.setAdjacencyMatrix5x5(List.of(
+                List.of(0, 1, 1, 0, 0),
+                List.of(1, 0, 1, 1, 0),
+                List.of(1, 1, 0, 1, 1),
+                List.of(0, 1, 1, 0, 1),
+                List.of(0, 0, 1, 1, 0)
+        ));
+        topology.setTransferCapacityKwMatrix5x5(List.of(
+                List.of(0, 50, 50, 0, 0),
+                List.of(50, 0, 50, 50, 0),
+                List.of(50, 50, 0, 50, 50),
+                List.of(0, 50, 50, 0, 50),
+                List.of(0, 0, 50, 50, 0)
+        ));
+        topology.setTransferLossRateMatrix5x5(List.of(
+                List.of(0.0, 0.02, 0.02, 0.0, 0.0),
+                List.of(0.02, 0.0, 0.02, 0.02, 0.0),
+                List.of(0.02, 0.02, 0.0, 0.02, 0.02),
+                List.of(0.0, 0.02, 0.02, 0.0, 0.02),
+                List.of(0.0, 0.0, 0.02, 0.02, 0.0)
+        ));
+        return topology;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 기상청 API 연동
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * ASOS 시간별 관측자료 API 호출 후 PastWeatherItemDto 목록 반환
+     * stnIds: 108=서울(수요), 129=서산(PV)
+     * 시간 범위: startDt 00:00 ~ endDt 22:00 (191개)
+     */
+    private List<PastWeatherItemDto> fetchAsosWeather(
+            String stnIds, String startDt, String endDt, DateTimeFormatter iso) {
+
+        String url = UriComponentsBuilder
+                .fromUriString("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList")
+                .queryParam("serviceKey", asosKey)
+                .queryParam("numOfRows", 300)
+                .queryParam("pageNo", 1)
+                .queryParam("dataType", "JSON")
+                .queryParam("dataCd", "ASOS")
+                .queryParam("dateCd", "HR")
+                .queryParam("startDt", startDt)
+                .queryParam("startHh", "00")
+                .queryParam("endDt", endDt)
+                .queryParam("endHh", "22")
+                .queryParam("stnIds", stnIds)
+                .build(true)
+                .toUriString();
+
+        try {
+            String json = restTemplate.getForObject(url, String.class);
+            return parseAsosToWeatherItems(json, iso);
+        } catch (Exception e) {
+            log.warn("[ASOS API 실패] stnIds={} : {}", stnIds, e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    private List<PastWeatherItemDto> parseAsosToWeatherItems(String json, DateTimeFormatter iso) {
+        try {
+            JsonNode root = objectMapper.readTree(json);
+
+            String resultCode = root.path("response").path("header").path("resultCode").asText();
+            if (!"00".equals(resultCode)) {
+                log.warn("[ASOS API] resultCode={}", resultCode);
+                return new ArrayList<>();
+            }
+
+            JsonNode items = root.path("response").path("body").path("items").path("item");
+            DateTimeFormatter asosFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+            List<PastWeatherItemDto> result = new ArrayList<>();
+
+            for (JsonNode node : items) {
+                PastWeatherItemDto item = new PastWeatherItemDto();
+                String tmRaw = node.path("tm").asText("");
+                try {
+                    LocalDateTime ldt = LocalDateTime.parse(tmRaw, asosFmt);
+                    item.setTm(ldt.atZone(KST).format(iso));
+                } catch (Exception ex) {
+                    item.setTm(tmRaw);
+                }
+                item.setTa(parseDoubleNode(node, "ta"));
+                item.setRn(parseDoubleNode(node, "rn"));
+                item.setWs(parseDoubleNode(node, "ws"));
+                item.setWd(parseDoubleNode(node, "wd"));
+                item.setHm(parseDoubleNode(node, "hm"));
+                item.setPa(parseDoubleNode(node, "pa"));
+                item.setPs(parseDoubleNode(node, "ps"));
+                item.setSs(parseDoubleNode(node, "ss"));
+                item.setIcsr(parseDoubleNode(node, "icsr"));
+                item.setDsnw(parseDoubleNode(node, "dsnw"));
+                item.setHr3Fhsc(parseDoubleNode(node, "hr3Fhsc"));
+                item.setDc10Tca(parseDoubleNode(node, "dc10Tca"));
+                result.add(item);
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("[ASOS 파싱 실패] : {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 기상청 단기예보 API 호출 후 ForecastWeatherItemDto 목록 반환
+     * nx/ny: 강남구(61,125), 서산(68,100)
+     * base_time: 2000 (22:10 호출 시 이용 가능한 최신 예보)
+     * 필터: targetDate(D+1) ~ targetDate+1일(D+2) 범위 48개
+     */
+    private List<ForecastWeatherItemDto> fetchVilageFcst(
+            int nx, int ny, String baseDate, LocalDate targetDate, DateTimeFormatter iso) {
+
+        String url = UriComponentsBuilder
+                .fromUriString("https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst")
+                .queryParam("serviceKey", forecastKey)
+                .queryParam("numOfRows", 1500)
+                .queryParam("pageNo", 1)
+                .queryParam("dataType", "JSON")
+                .queryParam("base_date", baseDate)
+                .queryParam("base_time", "2000")
+                .queryParam("nx", nx)
+                .queryParam("ny", ny)
+                .build(true)
+                .toUriString();
+
+        try {
+            String json = restTemplate.getForObject(url, String.class);
+            return parseVilageFcstItems(json, targetDate, iso);
+        } catch (Exception e) {
+            log.warn("[단기예보 API 실패] nx={}, ny={} : {}", nx, ny, e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    private List<ForecastWeatherItemDto> parseVilageFcstItems(
+            String json, LocalDate targetDate, DateTimeFormatter iso) {
+        try {
+            JsonNode root = objectMapper.readTree(json);
+
+            String resultCode = root.path("response").path("header").path("resultCode").asText();
+            if (!"00".equals(resultCode)) {
+                log.warn("[단기예보 API] resultCode={}, msg={}",
+                        resultCode, root.path("response").path("header").path("resultMsg").asText());
+                return new ArrayList<>();
+            }
+
+            JsonNode items = root.path("response").path("body").path("items").path("item");
+
+            LocalDate targetEnd = targetDate.plusDays(1); // D+2
+            DateTimeFormatter dateFmt = DateTimeFormatter.BASIC_ISO_DATE;
+            DateTimeFormatter fcstDtFmt = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
+
+            // pivot: "fcstDate_fcstTime" → ForecastWeatherItemDto
+            Map<String, ForecastWeatherItemDto> pivot = new LinkedHashMap<>();
+            Map<String, Double> tmnMap = new HashMap<>();
+            Map<String, Double> tmxMap = new HashMap<>();
+
+            for (JsonNode node : items) {
+                String fcstDate = node.path("fcstDate").asText();
+                String fcstTime = node.path("fcstTime").asText();
+                String category = node.path("category").asText();
+                String value    = node.path("fcstValue").asText();
+
+                // D+1, D+2 범위만 사용
+                LocalDate fcstDay = LocalDate.parse(fcstDate, dateFmt);
+                if (fcstDay.isBefore(targetDate) || fcstDay.isAfter(targetEnd)) continue;
+
+                if ("TMN".equals(category)) {
+                    try { tmnMap.put(fcstDate, Double.parseDouble(value)); } catch (Exception ignored) {}
+                    continue;
+                }
+                if ("TMX".equals(category)) {
+                    try { tmxMap.put(fcstDate, Double.parseDouble(value)); } catch (Exception ignored) {}
+                    continue;
+                }
+
+                String key = fcstDate + "_" + fcstTime;
+                pivot.computeIfAbsent(key, k -> {
+                    ForecastWeatherItemDto dto = new ForecastWeatherItemDto();
+                    try {
+                        LocalDateTime ldt = LocalDateTime.parse(fcstDate + fcstTime, fcstDtFmt);
+                        dto.setTmef(ldt.atZone(KST).format(iso));
+                    } catch (Exception ex) {
+                        dto.setTmef(fcstDate + "T" + fcstTime);
+                    }
+                    return dto;
+                });
+
+                applyForecastCategory(pivot.get(key), category, value);
+            }
+
+            // TMN/TMX를 해당 날짜의 모든 슬롯에 주입
+            List<ForecastWeatherItemDto> result = new ArrayList<>(pivot.values());
+            for (ForecastWeatherItemDto dto : result) {
+                String tmef = dto.getTmef();
+                if (tmef != null && tmef.length() >= 10) {
+                    String dateKey = tmef.substring(0, 10).replace("-", "");
+                    if (tmnMap.containsKey(dateKey)) dto.setTmn(tmnMap.get(dateKey));
+                    if (tmxMap.containsKey(dateKey)) dto.setTmx(tmxMap.get(dateKey));
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("[단기예보 파싱 실패] : {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    private void applyForecastCategory(ForecastWeatherItemDto dto, String category, String value) {
+        try {
+            switch (category) {
+                case "TMP" -> dto.setTmp(Double.parseDouble(value));
+                case "POP" -> dto.setPop(Double.parseDouble(value));
+                case "PTY" -> dto.setPty(Integer.parseInt(value));
+                case "PCP" -> { try { dto.setPcp(Double.parseDouble(value)); } catch (Exception e) { dto.setPcp(value); } }
+                case "SNO" -> { try { dto.setSno(Double.parseDouble(value)); } catch (Exception e) { dto.setSno(value); } }
+                case "REH" -> dto.setReh(Double.parseDouble(value));
+                case "SKY" -> dto.setSky(Integer.parseInt(value));
+                case "WSD" -> dto.setWsd(Double.parseDouble(value));
+                case "VEC" -> dto.setVec(Double.parseDouble(value));
+                case "UUU" -> dto.setUuu(Double.parseDouble(value));
+                case "VVV" -> dto.setVvv(Double.parseDouble(value));
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private Double parseDoubleNode(JsonNode node, String field) {
+        JsonNode n = node.path(field);
+        if (n.isMissingNode() || n.isNull()) return null;
+        String s = n.asText("").trim();
+        if (s.isEmpty()) return null;
+        try { return Double.parseDouble(s); } catch (NumberFormatException e) { return null; }
     }
 
     public String callAsosApi() {
