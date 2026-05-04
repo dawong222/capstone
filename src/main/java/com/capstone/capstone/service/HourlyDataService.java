@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -64,6 +65,18 @@ public class HourlyDataService {
         if (hoursCollected >= 24) {
             log.info("[AI 전송] 24시간 데이터 수집 완료 → AI 서버 전송");
             triggerAi(latest);
+        }
+    }
+
+    @Scheduled(cron = "0 10 22 * * *") // 매일 22:10 AI 서버 전송
+    public void sendDailyAiRequest() {
+        log.info("[22:10 AI 전송] 스케줄 시작");
+        try {
+            Map<String, Object> payload = schedulingService.buildRawAiRequest();
+            String response = aiService.sendRaw(payload);
+            log.info("[22:10 AI 전송 완료] response={}", response);
+        } catch (Exception e) {
+            log.error("[22:10 AI 전송 실패] {}", e.getMessage());
         }
     }
 

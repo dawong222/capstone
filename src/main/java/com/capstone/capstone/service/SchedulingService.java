@@ -20,6 +20,11 @@ import org.springframework.web.util.UriComponentsBuilder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -407,8 +412,8 @@ public class SchedulingService {
         req.setDemandPastWeatherHourly(fetchAsosWeather("108", startDt, endDt, iso));
         req.setDemandForecastShortTermHourly(fetchVilageFcst(61, 125, baseDateFmt, targetDate, iso));
         req.setPvPastGenerationHourly(buildPvPastGeneration(snapshots, iso));
-        req.setPvPastWeatherHourly(fetchAsosWeather("129", startDt, endDt, iso));
-        req.setPvForecastShortTermHourly(fetchVilageFcst(68, 100, baseDateFmt, targetDate, iso));
+        req.setPvPastWeatherHourly(fetchAsosWeather("108", startDt, endDt, iso));
+        req.setPvForecastShortTermHourly(fetchVilageFcst(61, 125, baseDateFmt, targetDate, iso));
         req.setStationCurrentStates(buildStationCurrentStates(allStations, callTime, iso));
         req.setTouPriceHourly(buildTouPriceHourly(targetDate, iso));
         req.setGridConstraints(buildGridConstraints());
@@ -580,7 +585,7 @@ public class SchedulingService {
         LocalDate d = LocalDate.now();
         LocalDate targetDate = d.plusDays(1);
         ZonedDateTime callTime = ZonedDateTime.now(KST);
-        DateTimeFormatter iso = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+        DateTimeFormatter iso = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
         String startDt   = d.minusDays(7).format(DateTimeFormatter.BASIC_ISO_DATE);
         String endDt     = d.format(DateTimeFormatter.BASIC_ISO_DATE);
         String baseDate  = endDt;
@@ -627,13 +632,11 @@ public class SchedulingService {
         }
         req.put("demand_past_demand_hourly", demandPast);
 
-        // ── 수요 과거 날씨 (ASOS 108 서울) ───────────────────────
         req.put("demand_past_weather_hourly", fetchRawAsosItems("108", startDt, endDt));
 
-        // ── 수요 단기예보 (강남구 nx=61, ny=125) ──────────────────
         req.put("demand_forecast_short_term_hourly", fetchRawForecastItems(61, 125, baseDate, targetDate));
 
-        // ── PV 과거 발전량 (stationId=0 기준 50kW PV) ────────────
+        // ── PV 과거 발전량
         List<Map<String, Object>> pvPast = new ArrayList<>();
         for (HourlySnapshot s : snapshots) {
             if (s.getStationId() == null || s.getStationId() != 0) continue;
@@ -647,11 +650,9 @@ public class SchedulingService {
         }
         req.put("pv_past_generation_hourly", pvPast);
 
-        // ── PV 과거 날씨 (ASOS 129 서산) ─────────────────────────
-        req.put("pv_past_weather_hourly", fetchRawAsosItems("129", startDt, endDt));
+        req.put("pv_past_weather_hourly", fetchRawAsosItems("108", startDt, endDt));
 
-        // ── PV 단기예보 (서산 nx=68, ny=100) ─────────────────────
-        req.put("pv_forecast_short_term_hourly", fetchRawForecastItems(68, 100, baseDate, targetDate));
+        req.put("pv_forecast_short_term_hourly", fetchRawForecastItems(61, 125, baseDate, targetDate));
 
         // ── 충전소 현재 상태 (MQTT) ───────────────────────────────
         req.put("station_current_states", buildRawStationStates(allStations, callTime, iso));
@@ -707,25 +708,41 @@ public class SchedulingService {
     }
 
     private List<Map<String, Object>> fetchRawAsosItems(String stnIds, String startDt, String endDt) {
-        String url = UriComponentsBuilder
-                .fromUriString("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList")
-                .queryParam("serviceKey", asosKey)
-                .queryParam("numOfRows", 300)
-                .queryParam("pageNo", 1)
-                .queryParam("dataType", "JSON")
-                .queryParam("dataCd", "ASOS")
-                .queryParam("dateCd", "HR")
-                .queryParam("startDt", startDt)
-                .queryParam("startHh", "00")
-                .queryParam("endDt", endDt)
-                .queryParam("endHh", "22")
-                .queryParam("stnIds", stnIds)
-                .build(true)
-                .toUriString();
-
         try {
-            String json = restTemplate.getForObject(url, String.class);
-            JsonNode items = objectMapper.readTree(json)
+            StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
+            urlBuilder.append("?" + URLEncoder.encode("serviceKey", "UTF-8") + "=" + asosKey);
+            urlBuilder.append("&" + URLEncoder.encode("pageNo",    "UTF-8") + "=" + URLEncoder.encode("1",    "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("numOfRows", "UTF-8") + "=" + URLEncoder.encode("300",  "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("dataType",  "UTF-8") + "=" + URLEncoder.encode("JSON", "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("dataCd",    "UTF-8") + "=" + URLEncoder.encode("ASOS", "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("dateCd",    "UTF-8") + "=" + URLEncoder.encode("HR",   "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("startDt",   "UTF-8") + "=" + URLEncoder.encode(startDt, "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("startHh",   "UTF-8") + "=" + URLEncoder.encode("00",  "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("endDt",     "UTF-8") + "=" + URLEncoder.encode(endDt,   "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("endHh",     "UTF-8") + "=" + URLEncoder.encode("22",  "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("stnIds",    "UTF-8") + "=" + URLEncoder.encode(stnIds,  "UTF-8"));
+
+            URL url = new URL(urlBuilder.toString());
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Content-type", "application/json");
+
+            BufferedReader rd;
+            if (conn.getResponseCode() >= 200 && conn.getResponseCode() <= 300) {
+                rd = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            } else {
+                rd = new BufferedReader(new InputStreamReader(conn.getErrorStream()));
+            }
+
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = rd.readLine()) != null) {
+                sb.append(line);
+            }
+            rd.close();
+            conn.disconnect();
+
+            JsonNode items = objectMapper.readTree(sb.toString())
                     .path("response").path("body").path("items").path("item");
             List<Map<String, Object>> result = new ArrayList<>();
             for (JsonNode n : items) {
@@ -769,18 +786,43 @@ public class SchedulingService {
 
             JsonNode items = root.path("response").path("body").path("items").path("item");
             DateTimeFormatter dateFmt = DateTimeFormatter.BASIC_ISO_DATE;
+            DateTimeFormatter fcstDtFmt = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
+            DateTimeFormatter iso = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
             LocalDate targetEnd = targetDate.plusDays(1); // D+2
 
-            List<Map<String, Object>> result = new ArrayList<>();
+            Map<String, Map<String, Object>> pivot = new LinkedHashMap<>();
             for (JsonNode n : items) {
                 String fcstDate = n.path("fcstDate").asText();
+                String fcstTime = n.path("fcstTime").asText();
+                String category = n.path("category").asText();
+                String value    = n.path("fcstValue").asText();
+
                 try {
                     LocalDate day = LocalDate.parse(fcstDate, dateFmt);
                     if (day.isBefore(targetDate) || day.isAfter(targetEnd)) continue;
                 } catch (Exception ignored) { continue; }
-                result.add(objectMapper.convertValue(n, Map.class));
+
+                String key = fcstDate + "_" + fcstTime;
+                Map<String, Object> slot = pivot.computeIfAbsent(key, k -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    try {
+                        LocalDateTime ldt = LocalDateTime.parse(fcstDate + fcstTime, fcstDtFmt);
+                        m.put("tm", ldt.atZone(KST).format(iso));
+                    } catch (Exception ex) {
+                        m.put("tm", fcstDate + "T" + fcstTime);
+                    }
+                    return m;
+                });
+
+                try {
+                    slot.put(category.toLowerCase(), Double.parseDouble(value));
+                } catch (NumberFormatException e) {
+                    slot.put(category.toLowerCase(), value);
+                }
             }
-            log.info("[단기예보 raw] nx={},ny={} → {}건", nx, ny, result.size());
+
+            List<Map<String, Object>> result = new ArrayList<>(pivot.values());
+            log.info("[단기예보 raw] nx={},ny={} → {}건(피벗)", nx, ny, result.size());
             return result;
         } catch (Exception e) {
             log.warn("[단기예보 raw 실패] nx={},ny={} : {}", nx, ny, e.getMessage());
@@ -864,26 +906,41 @@ public class SchedulingService {
      */
     private List<PastWeatherItemDto> fetchAsosWeather(
             String stnIds, String startDt, String endDt, DateTimeFormatter iso) {
-
-        String url = UriComponentsBuilder
-                .fromUriString("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList")
-                .queryParam("serviceKey", asosKey)
-                .queryParam("numOfRows", 300)
-                .queryParam("pageNo", 1)
-                .queryParam("dataType", "JSON")
-                .queryParam("dataCd", "ASOS")
-                .queryParam("dateCd", "HR")
-                .queryParam("startDt", startDt)
-                .queryParam("startHh", "00")
-                .queryParam("endDt", endDt)
-                .queryParam("endHh", "22")
-                .queryParam("stnIds", stnIds)
-                .build(true)
-                .toUriString();
-
         try {
-            String json = restTemplate.getForObject(url, String.class);
-            return parseAsosToWeatherItems(json, iso);
+            StringBuilder urlBuilder = new StringBuilder("http://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
+            urlBuilder.append("?" + URLEncoder.encode("serviceKey", "UTF-8") + "=" + asosKey);
+            urlBuilder.append("&" + URLEncoder.encode("pageNo",     "UTF-8") + "=" + URLEncoder.encode("1",    "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("numOfRows",  "UTF-8") + "=" + URLEncoder.encode("300",  "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("dataType",   "UTF-8") + "=" + URLEncoder.encode("JSON", "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("dataCd",     "UTF-8") + "=" + URLEncoder.encode("ASOS", "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("dateCd",     "UTF-8") + "=" + URLEncoder.encode("HR",   "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("startDt",    "UTF-8") + "=" + URLEncoder.encode(startDt, "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("startHh",    "UTF-8") + "=" + URLEncoder.encode("00",  "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("endDt",      "UTF-8") + "=" + URLEncoder.encode(endDt,   "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("endHh",      "UTF-8") + "=" + URLEncoder.encode("22",  "UTF-8"));
+            urlBuilder.append("&" + URLEncoder.encode("stnIds",     "UTF-8") + "=" + URLEncoder.encode(stnIds,  "UTF-8"));
+
+            URL url = new URL(urlBuilder.toString());
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Content-type", "application/json");
+
+            BufferedReader rd;
+            if (conn.getResponseCode() >= 200 && conn.getResponseCode() <= 300) {
+                rd = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            } else {
+                rd = new BufferedReader(new InputStreamReader(conn.getErrorStream()));
+            }
+
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = rd.readLine()) != null) {
+                sb.append(line);
+            }
+            rd.close();
+            conn.disconnect();
+
+            return parseAsosToWeatherItems(sb.toString(), iso);
         } catch (Exception e) {
             log.warn("[ASOS API 실패] stnIds={} : {}", stnIds, e.getMessage());
             return new ArrayList<>();
