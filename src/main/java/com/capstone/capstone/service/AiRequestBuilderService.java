@@ -220,36 +220,6 @@ public class AiRequestBuilderService {
         return req;
     }
 
-    // ─── Mock 데이터 ──────────────────────────────────────────────────
-
-    public AiRequestDto buildMockAiRequest() {
-        AiRequestDto request = new AiRequestDto();
-        request.setRequestId("mock-" + Instant.now().toEpochMilli());
-        request.setRequestTimestamp(Instant.now().toString());
-        request.setScheduleTargetDate(LocalDate.now().plusDays(1).toString());
-        request.setScheduleHorizonHours("24");
-        request.setClusterState(buildClusterState());
-        request.setStations(buildMockStations());
-        return request;
-    }
-
-    public AiResponseDto buildMockAiResponse(String requestId) {
-        AiResponseDto response = new AiResponseDto();
-        response.setRequestId(requestId == null || requestId.isBlank() ? "mock-response" : requestId);
-        response.setTimestamp(Instant.now().toString());
-
-        AiResponseDto.Status status = new AiResponseDto.Status();
-        status.setSuccess(true);
-        status.setErrorCode(0);
-        status.setMessage("Mock AI response generated");
-        response.setStatus(status);
-
-        response.setStationDayAheadSchedule(List.of(
-                mockStationSchedule(1L),
-                mockStationSchedule(2L)));
-        return response;
-    }
-
     // ─── private builders ─────────────────────────────────────────────
 
     private ClusterStateDto buildClusterState() {
@@ -300,70 +270,6 @@ public class AiRequestBuilderService {
         dto.setConstraints(constraints);
 
         return dto;
-    }
-
-    private List<StationDto> buildMockStations() {
-        return List.of(
-                mockStation(1L, 0.42, 2, 15.0, 23.0, 0.0, 8.0, 0.0),
-                mockStation(2L, 0.68, 1, 7.0, 18.0, -4.0, 3.0, 0.0));
-    }
-
-    private StationDto mockStation(Long stationId, double soc, int demandCount,
-                                   double pPv, double pLoad, double pEss, double pGrid, double pTr) {
-        StationDto dto = new StationDto();
-        dto.setStationId(stationId);
-
-        CurrentStateDto state = new CurrentStateDto();
-        state.setSoc(soc);
-        state.setDemandCount(demandCount);
-
-        List<ChargerDto> chargers = new ArrayList<>();
-        for (int i = 1; i <= 3; i++) {
-            ChargerDto charger = new ChargerDto();
-            charger.setChargerId(stationId * 100 + i);
-            charger.setType("AC");
-            charger.setActive(i <= demandCount);
-            charger.setPowerDemand(i <= demandCount ? 7.0 : 0.0);
-            chargers.add(charger);
-        }
-        state.setChargers(chargers);
-
-        PowerDto power = new PowerDto();
-        power.setPPv(pPv);
-        power.setPLoad(pLoad);
-        power.setPEss(pEss);
-        power.setPGrid(pGrid);
-        power.setPTr(pTr);
-        state.setPower(power);
-        dto.setCurrentState(state);
-
-        ConstraintsDto constraints = new ConstraintsDto();
-        constraints.setSocMin(0.2);
-        constraints.setSocMax(0.9);
-        constraints.setEssMaxCharge(15.0);
-        constraints.setEssMaxDischarge(15.0);
-        dto.setConstraints(constraints);
-
-        return dto;
-    }
-
-    private StationScheduleDto mockStationSchedule(Long stationId) {
-        StationScheduleDto stationSchedule = new StationScheduleDto();
-        stationSchedule.setStationId(stationId);
-
-        List<HourlyPlanDto> plans = new ArrayList<>();
-        for (int hour = 0; hour < 24; hour++) {
-            HourlyPlanDto plan = new HourlyPlanDto();
-            plan.setHour(hour);
-            plan.setEssMode(hour < 8 ? "charge" : "discharge");
-            plan.setEssPower(hour < 8 ? 6.0 : 4.0);
-            plan.setGridUsage(hour < 8 ? 12.0 : 8.0);
-            plan.setPvPriority(hour >= 10 && hour <= 16 ? 1.0 : 0.5);
-            plan.setTransfer(Collections.emptyList());
-            plans.add(plan);
-        }
-        stationSchedule.setHourlyPlan(plans);
-        return stationSchedule;
     }
 
     private List<DemandPastDemandItemDto> buildDemandPastDemand(

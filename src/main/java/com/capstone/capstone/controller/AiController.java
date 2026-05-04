@@ -42,25 +42,6 @@ public class AiController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/request/mock")
-    public ResponseEntity<?> requestAiSchedulingWithMockData() {
-        AiRequestDto request = schedulingService.buildMockAiRequest();
-        AiResponseDto response = schedulingService.callAiServer(request);
-        schedulingService.saveAiResult(response);
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/mock-data/request")
-    public ResponseEntity<AiRequestDto> getMockAiRequest() {
-        return ResponseEntity.ok(schedulingService.buildMockAiRequest());
-    }
-
-    @PostMapping("/mock-data/response")
-    public ResponseEntity<AiResponseDto> getMockAiResponse(@RequestBody(required = false) AiRequestDto dto) {
-        String requestId = dto == null ? null : dto.getRequestId();
-        return ResponseEntity.ok(schedulingService.buildMockAiResponse(requestId));
-    }
-
     // ─── v2: raw 데이터 그대로 AI 서버 전송 ──────────────────────
 
     /** 전송할 JSON 미리보기 (AI 서버 미전송) */

@@ -21,14 +21,6 @@ public class SchedulingService {
         return aiRequestBuilderService.buildAiRequest();
     }
 
-    public AiRequestDto buildMockAiRequest() {
-        return aiRequestBuilderService.buildMockAiRequest();
-    }
-
-    public AiResponseDto buildMockAiResponse(String requestId) {
-        return aiRequestBuilderService.buildMockAiResponse(requestId);
-    }
-
     public Map<String, Object> buildRawAiRequest() {
         return aiRequestBuilderService.buildRawAiRequest();
     }
