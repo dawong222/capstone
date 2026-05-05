@@ -111,26 +111,22 @@ public class AiRequestBuilderService {
         LocalDate targetDate = d.plusDays(1);
         ZonedDateTime callTime = ZonedDateTime.now(KST);
         DateTimeFormatter iso = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
-        String startDt  = d.minusDays(7).format(DateTimeFormatter.BASIC_ISO_DATE);
-        String endDt    = d.format(DateTimeFormatter.BASIC_ISO_DATE);
-        String baseDate = endDt;
 
         List<ChargingStation> allStations = stationRepository.findAll();
         allStations.sort(Comparator.comparing(ChargingStation::getId));
-        Map<Integer, String> nameMap = new HashMap<>();
-        for (int i = 0; i < allStations.size(); i++) nameMap.put(i, allStations.get(i).getName());
-
-        List<HourlySnapshot> snapshots = snapshotRepository.findByRecordedAtBetweenOrderByRecordedAt(
-                d.minusDays(7).atStartOfDay(), d.atTime(21, 0, 0));
+        MqttPayloadDto latest = dataProcessingService.getLatestData();
+        String ts = callTime.format(iso);
 
         Map<String, Object> req = new LinkedHashMap<>();
 
-        req.put("request_id", String.format("schedule-forecast-%s-%s-0001",
+        req.put("request_id", String.format("backend-schedule-request-%s-%s-0001",
                 d.format(DateTimeFormatter.ofPattern("yyyyMMdd")),
                 callTime.format(DateTimeFormatter.ofPattern("HHmmss"))));
-        req.put("request_timestamp", callTime.format(iso));
+        req.put("request_timestamp", ts);
         req.put("schedule_target_date", targetDate.toString());
         req.put("schedule_horizon_hours", 24);
+        req.put("schedule_mode", "day-ahead");
+        req.put("timezone", "Asia/Seoul");
 
         Map<String, Object> window = new LinkedHashMap<>();
         window.put("start", targetDate.atStartOfDay(KST).format(iso));
@@ -140,84 +136,163 @@ public class AiRequestBuilderService {
         window.put("slot_definition", "slot 0 = 00:00~01:00, slot 23 = 23:00~24:00");
         req.put("target_window", window);
 
-        List<Map<String, Object>> demandPast = new ArrayList<>();
-        for (HourlySnapshot s : snapshots) {
-            ZonedDateTime st = s.getRecordedAt().atZone(KST);
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("tm",           st.format(iso));
-            item.put("station_name", nameMap.getOrDefault(s.getStationId(), "station-" + s.getStationId()));
-            item.put("slot_start",   st.format(iso));
-            item.put("slot_end",     st.plusHours(1).format(iso));
-            item.put("demand_kwh",   s.getPLoad() != null ? s.getPLoad() / 1000.0 : 0.0);
-            demandPast.add(item);
+        List<Integer> physicalIds = new ArrayList<>();
+        List<Integer> simulatedIds = new ArrayList<>();
+        for (int i = 0; i < allStations.size(); i++) {
+            boolean isPhysical = latest != null && latest.getStations() != null
+                    && i < latest.getStations().size()
+                    && latest.getStations().get(i).getHeader().isPhysical();
+            if (isPhysical) physicalIds.add(i);
+            else simulatedIds.add(i);
         }
-        req.put("demand_past_demand_hourly", demandPast);
-        req.put("demand_past_weather_hourly", weatherApiService.fetchRawAsosItems("108", startDt, endDt));
-        req.put("demand_forecast_short_term_hourly", weatherApiService.fetchRawForecastItems(61, 125, baseDate, targetDate));
+        Map<String, Object> clusterState = new LinkedHashMap<>();
+        clusterState.put("station_count", allStations.size());
+        clusterState.put("physical_station_ids", physicalIds);
+        clusterState.put("simulated_station_ids", simulatedIds);
+        clusterState.put("grid_limit_kw", 200.0);
+        req.put("cluster_state", clusterState);
 
-        List<Map<String, Object>> pvPast = new ArrayList<>();
-        for (HourlySnapshot s : snapshots) {
-            if (s.getStationId() == null || s.getStationId() != 0) continue;
-            ZonedDateTime st = s.getRecordedAt().atZone(KST);
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("tm",         st.format(iso));
-            item.put("slot_start", st.format(iso));
-            item.put("slot_end",   st.plusHours(1).format(iso));
-            item.put("gen_kwh",    s.getPPv() != null ? s.getPPv() / 1000.0 : 0.0);
-            pvPast.add(item);
-        }
-        req.put("pv_past_generation_hourly", pvPast);
-        req.put("pv_past_weather_hourly", weatherApiService.fetchRawAsosItems("108", startDt, endDt));
-        req.put("pv_forecast_short_term_hourly", weatherApiService.fetchRawForecastItems(61, 125, baseDate, targetDate));
+        Map<String, Object> constraints = new LinkedHashMap<>();
+        constraints.put("soc_min", 0.1);
+        constraints.put("soc_max", 0.9);
+        req.put("constraints", constraints);
 
-        req.put("station_current_states", buildRawStationStates(allStations, callTime, iso));
+        Map<String, Object> transfer = new LinkedHashMap<>();
+        transfer.put("enabled", true);
+        transfer.put("capacity_kw", 30.0);
+        transfer.put("loss_rate", 0.03);
+        req.put("transfer", transfer);
+
+        Map<String, Object> gridConstraints = new LinkedHashMap<>();
+        gridConstraints.put("cluster_grid_limit_kw", 200.0);
+        gridConstraints.put("station_grid_limit_kw", 120.0);
+        gridConstraints.put("peak_limit_kw", 200.0);
+        req.put("grid_constraints", gridConstraints);
+
+        Map<String, Object> essConstraints = new LinkedHashMap<>();
+        essConstraints.put("ess_capacity_kwh_per_station", 100.0);
+        essConstraints.put("ess_min_soc", 0.1);
+        essConstraints.put("ess_max_soc", 0.9);
+        essConstraints.put("ess_max_charge_kw", 50.0);
+        essConstraints.put("ess_max_discharge_kw", 50.0);
+        essConstraints.put("round_trip_efficiency", 0.9025);
+        req.put("ess_constraints", essConstraints);
+
+        List<String> stationOrder = allStations.stream().map(ChargingStation::getName).toList();
+        Map<String, Object> topology = new LinkedHashMap<>();
+        topology.put("transfer_enabled", true);
+        topology.put("station_order", stationOrder);
+        topology.put("adjacency_matrix_5x5", List.of(
+                List.of(0,1,1,0,0), List.of(1,0,1,1,0), List.of(1,1,0,1,1),
+                List.of(0,1,1,0,1), List.of(0,0,1,1,0)));
+        topology.put("transfer_capacity_kw_matrix_5x5", List.of(
+                List.of(0,30,30,0,0), List.of(30,0,30,30,0), List.of(30,30,0,30,30),
+                List.of(0,30,30,0,30), List.of(0,0,30,30,0)));
+        topology.put("transfer_loss_rate_matrix_5x5", List.of(
+                List.of(0.0,0.03,0.03,0.0,0.0), List.of(0.03,0.0,0.03,0.03,0.0),
+                List.of(0.03,0.03,0.0,0.03,0.03), List.of(0.0,0.03,0.03,0.0,0.03),
+                List.of(0.0,0.0,0.03,0.03,0.0)));
+        req.put("transfer_topology", topology);
+
+        Map<String, Double> touPriceMap = new LinkedHashMap<>();
+        for (int slot = 0; slot < 24; slot++) touPriceMap.put(String.valueOf(slot), getTouPrice(slot));
+        req.put("tou_price_krw_per_kwh", touPriceMap);
 
         List<Map<String, Object>> tou = new ArrayList<>();
         for (int slot = 0; slot < 24; slot++) {
             ZonedDateTime st = targetDate.atTime(slot, 0).atZone(KST);
-            String level; double price;
-            if (slot >= 23 || slot < 9)                                            { level = "off_peak";  price = 93.3;  }
-            else if ((slot >= 10 && slot < 12) || (slot >= 13 && slot < 17))      { level = "on_peak";   price = 229.5; }
-            else                                                                    { level = "mid_peak";  price = 146.9; }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("slot", slot);
+            row.put("hour", slot);
+            row.put("slot_label", String.format("%02d:00~%02d:00", slot, slot + 1));
             row.put("time_start", st.format(iso));
             row.put("time_end",   st.plusHours(1).format(iso));
-            row.put("tou_level",  level);
-            row.put("price_krw_per_kwh", price);
+            row.put("tou_level",  getTouLevel(slot));
+            row.put("price_krw_per_kwh", getTouPrice(slot));
             tou.add(row);
         }
         req.put("tou_price_hourly", tou);
 
-        req.put("grid_constraints", Map.of(
-                "cluster_grid_limit_kw", 500.0,
-                "station_grid_limit_kw", 120.0,
-                "peak_limit_kw",         500.0));
-
-        req.put("ess_constraints", Map.of(
-                "ess_capacity_kwh_per_station", 100.0,
-                "ess_min_soc",           0.1,
-                "ess_max_soc",           0.9,
-                "ess_max_charge_kw",     50.0,
-                "ess_max_discharge_kw",  50.0,
-                "round_trip_efficiency", 0.85));
-
-        List<String> stationOrder = allStations.stream().map(ChargingStation::getName).toList();
-        req.put("transfer_topology", Map.of(
-                "transfer_enabled", true,
-                "station_order", stationOrder,
-                "adjacency_matrix_5x5", List.of(
-                        List.of(0,1,1,0,0), List.of(1,0,1,1,0), List.of(1,1,0,1,1),
-                        List.of(0,1,1,0,1), List.of(0,0,1,1,0)),
-                "transfer_capacity_kw_matrix_5x5", List.of(
-                        List.of(0,50,50,0,0), List.of(50,0,50,50,0), List.of(50,50,0,50,50),
-                        List.of(0,50,50,0,50), List.of(0,0,50,50,0)),
-                "transfer_loss_rate_matrix_5x5", List.of(
-                        List.of(0.0,0.02,0.02,0.0,0.0), List.of(0.02,0.0,0.02,0.02,0.0),
-                        List.of(0.02,0.02,0.0,0.02,0.02), List.of(0.0,0.02,0.02,0.0,0.02),
-                        List.of(0.0,0.0,0.02,0.02,0.0))));
+        List<Map<String, Object>> stationList = buildRawStationList(allStations, latest, ts);
+        req.put("stations", stationList);
+        req.put("station_current_states", buildRawStationList(allStations, latest, ts));
 
         return req;
+    }
+
+    private String getTouLevel(int slot) {
+        if (slot <= 7 || slot >= 22) return "off_peak";
+        if (slot == 11 || (slot >= 13 && slot <= 17)) return "on_peak";
+        return "mid_peak";
+    }
+
+    private double getTouPrice(int slot) {
+        if (slot <= 7 || slot >= 22) return 83.1;
+        if (slot == 11 || (slot >= 13 && slot <= 17)) return 270.8;
+        return 140.0;
+    }
+
+    private List<Map<String, Object>> buildRawStationList(
+            List<ChargingStation> allStations, MqttPayloadDto latest, String ts) {
+        List<Map<String, Object>> stations = new ArrayList<>();
+        for (int i = 0; i < allStations.size(); i++) {
+            ChargingStation station = allStations.get(i);
+            boolean hasMqtt = latest != null && latest.getStations() != null
+                    && i < latest.getStations().size();
+
+            Map<String, Object> s = new LinkedHashMap<>();
+            s.put("station_id", i);
+            s.put("station_name", station.getName());
+            s.put("is_physical", hasMqtt && latest.getStations().get(i).getHeader().isPhysical());
+
+            Map<String, Object> state = new LinkedHashMap<>();
+            state.put("timestamp", ts);
+            if (hasMqtt) {
+                MqttStationDto m = latest.getStations().get(i);
+                double soc = m.getPayload().getStateOfCharge().getSoc();
+                state.put("soc", soc);
+                state.put("ess_soc", soc);
+                state.put("p_pv_kw",   m.getPayload().getPowerMetricsW().getPPv()  / 1000.0);
+                state.put("p_load_kw", m.getPayload().getPowerMetricsW().getPLoad() / 1000.0);
+                state.put("p_grid_kw", m.getPayload().getPowerMetricsW().getPGrid() / 1000.0);
+            } else {
+                state.put("soc", 0.5);
+                state.put("ess_soc", 0.5);
+                state.put("p_pv_kw",   0.0);
+                state.put("p_load_kw", 0.0);
+                state.put("p_grid_kw", 0.0);
+            }
+            state.put("error_code", 0);
+            s.put("current_state", state);
+
+            s.put("ess_capacity_kwh",     100.0);
+            s.put("ess_max_charge_kw",     50.0);
+            s.put("ess_max_discharge_kw",  50.0);
+            s.put("ess_charge_efficiency",    0.95);
+            s.put("ess_discharge_efficiency", 0.95);
+
+            List<Map<String, Object>> chargers = new ArrayList<>();
+            if (hasMqtt) {
+                for (MqttChargerStatusDto cs : latest.getStations().get(i).getPayload().getChargerStatus()) {
+                    String type = (cs.getChargerId() == 0 || cs.getChargerId() == 3) ? "fast" : "slow";
+                    double ratedPower = "fast".equals(type) ? 50.0 : 7.0;
+                    double power = cs.isHasDemand() ? 7.0 : 0.0;
+                    Map<String, Object> c = new LinkedHashMap<>();
+                    c.put("charger_id",       cs.getChargerId());
+                    c.put("type",             type);
+                    c.put("charger_type",     type);
+                    c.put("rated_power_kw",   ratedPower);
+                    c.put("is_active",        cs.isHasDemand());
+                    c.put("has_demand",       cs.isHasDemand());
+                    c.put("power_demand_kw",  power);
+                    c.put("current_power_kw", power);
+                    chargers.add(c);
+                }
+            }
+            s.put("chargers", chargers);
+            stations.add(s);
+        }
+        return stations;
     }
 
     // ─── private builders ─────────────────────────────────────────────
@@ -398,48 +473,4 @@ public class AiRequestBuilderService {
         return topology;
     }
 
-    private List<Map<String, Object>> buildRawStationStates(
-            List<ChargingStation> allStations, ZonedDateTime callTime, DateTimeFormatter iso) {
-        MqttPayloadDto latest = dataProcessingService.getLatestData();
-        String ts = callTime.format(iso);
-        List<Map<String, Object>> states = new ArrayList<>();
-
-        for (int i = 0; i < allStations.size(); i++) {
-            ChargingStation station = allStations.get(i);
-            Map<String, Object> state = new LinkedHashMap<>();
-            state.put("station_id",   i);
-            state.put("station_name", station.getName());
-            state.put("timestamp",    ts);
-            state.put("error_code",   0);
-
-            boolean hasMqtt = latest != null && latest.getStations() != null
-                    && i < latest.getStations().size();
-
-            if (hasMqtt) {
-                MqttStationDto m = latest.getStations().get(i);
-                state.put("is_physical", m.getHeader().isPhysical());
-                state.put("ess_soc", m.getPayload().getStateOfCharge().getSoc());
-
-                List<Map<String, Object>> chargers = new ArrayList<>();
-                for (MqttChargerStatusDto cs : m.getPayload().getChargerStatus()) {
-                    Map<String, Object> cd = new LinkedHashMap<>();
-                    cd.put("charger_id",       String.format("ch-%03d", cs.getChargerId()));
-                    cd.put("charger_type",     "fast");
-                    cd.put("rated_power_kw",   100.0);
-                    cd.put("is_active",        cs.isHasDemand());
-                    cd.put("current_power_kw", cs.isHasDemand() ? 7.0 : 0.0);
-                    chargers.add(cd);
-                }
-                state.put("charger_count", chargers.size());
-                state.put("chargers", chargers);
-            } else {
-                state.put("is_physical",   true);
-                state.put("ess_soc",       0.5);
-                state.put("charger_count", 0);
-                state.put("chargers",      new ArrayList<>());
-            }
-            states.add(state);
-        }
-        return states;
-    }
 }
