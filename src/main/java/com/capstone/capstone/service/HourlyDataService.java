@@ -70,8 +70,11 @@ public class HourlyDataService {
         log.info("[22:10 AI 전송] 스케줄 시작");
         try {
             Map<String, Object> payload = aiRequestBuilderService.buildRawAiRequest();
-            String response = aiService.sendRaw(payload);
-            log.info("[22:10 AI 전송 완료] response={}", response);
+            AiResponseDto response = aiService.sendRaw(payload);
+            if (response != null) {
+                scheduleResultService.saveAiResult(response);
+            }
+            log.info("[22:10 AI 전송 완료] requestId={}", response != null ? response.getRequestId() : "null");
         } catch (Exception e) {
             log.error("[22:10 AI 전송 실패] {}", e.getMessage());
         }

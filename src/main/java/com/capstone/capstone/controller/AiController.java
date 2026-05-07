@@ -50,11 +50,12 @@ public class AiController {
         return ResponseEntity.ok(schedulingService.buildRawAiRequest());
     }
 
-    /** Raw 데이터를 AI 서버에 전송하고 응답 반환 */
+    /** Raw 데이터를 AI 서버에 전송, 응답 파싱 후 DB 저장 */
     @PostMapping("/v2/send")
-    public ResponseEntity<String> sendRawToAi() {
+    public ResponseEntity<AiResponseDto> sendRawToAi() {
         Map<String, Object> payload = schedulingService.buildRawAiRequest();
-        String response = aiService.sendRaw(payload);
+        AiResponseDto response = aiService.sendRaw(payload);
+        schedulingService.saveAiResult(response);
         return ResponseEntity.ok(response);
     }
 }
