@@ -1,7 +1,5 @@
 package com.capstone.capstone.service;
 
-import com.capstone.capstone.dto.ai.ForecastWeatherItemDto;
-import com.capstone.capstone.dto.ai.PastWeatherItemDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -41,17 +39,6 @@ public class WeatherApiService {
 
     // ─── ASOS 과거 관측 ───────────────────────────────────────────────
 
-    public List<PastWeatherItemDto> fetchAsosWeather(
-            String stnIds, String startDt, String endDt, DateTimeFormatter iso) {
-        try {
-            String body = httpGet(buildAsosUrl(stnIds, startDt, endDt));
-            return parseAsosToWeatherItems(body, iso);
-        } catch (Exception e) {
-            log.warn("[ASOS API 실패] stnIds={} : {}", stnIds, e.getMessage());
-            return new ArrayList<>();
-        }
-    }
-
     public List<Map<String, Object>> fetchRawAsosItems(String stnIds, String startDt, String endDt) {
         try {
             String body = httpGet(buildAsosUrl(stnIds, startDt, endDt));
@@ -69,27 +56,14 @@ public class WeatherApiService {
         }
     }
 
-    public List<Map<String, String>> getHistoryRaw() {
-        try {
-            String json = callAsosApi();
-            return parseAsosJson(json);
-        } catch (Exception e) {
-            throw new RuntimeException("ASOS API 호출 실패", e);
-        }
+    public List<Map<String, Object>> getHistoryRaw() {
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMdd");
+        String startDt = LocalDate.now().minusDays(7).format(fmt);
+        String endDt   = LocalDate.now().format(fmt);
+        return fetchRawAsosItems("108", startDt, endDt);
     }
 
     // ─── 단기예보 ─────────────────────────────────────────────────────
-
-    public List<ForecastWeatherItemDto> fetchVilageFcst(
-            int nx, int ny, String baseDate, LocalDate targetDate, DateTimeFormatter iso) {
-        try {
-            String json = restTemplate.getForObject(buildVilageFcstUrl(nx, ny, baseDate, "2000"), String.class);
-            return parseVilageFcstItems(json, targetDate, iso);
-        } catch (Exception e) {
-            log.warn("[단기예보 API 실패] nx={}, ny={} : {}", nx, ny, e.getMessage());
-            return new ArrayList<>();
-        }
-    }
 
     public List<Map<String, Object>> fetchRawForecastItems(int nx, int ny, String baseDate, LocalDate targetDate) {
         String baseTime = computeLatestBaseTime();
@@ -211,172 +185,5 @@ public class WeatherApiService {
         return result;
     }
 
-    private List<PastWeatherItemDto> parseAsosToWeatherItems(String json, DateTimeFormatter iso) {
-        try {
-            JsonNode root = objectMapper.readTree(json);
-            String resultCode = root.path("response").path("header").path("resultCode").asText();
-            if (!"00".equals(resultCode)) {
-                log.warn("[ASOS API] resultCode={}", resultCode);
-                return new ArrayList<>();
-            }
-            JsonNode items = root.path("response").path("body").path("items").path("item");
-            DateTimeFormatter asosFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-            List<PastWeatherItemDto> result = new ArrayList<>();
-            for (JsonNode node : items) {
-                PastWeatherItemDto item = new PastWeatherItemDto();
-                String tmRaw = node.path("tm").asText("");
-                try {
-                    item.setTm(LocalDateTime.parse(tmRaw, asosFmt).atZone(KST).format(iso));
-                } catch (Exception ex) {
-                    item.setTm(tmRaw);
-                }
-                item.setTa(parseDoubleNode(node, "ta"));
-                item.setRn(parseDoubleNode(node, "rn"));
-                item.setWs(parseDoubleNode(node, "ws"));
-                item.setWd(parseDoubleNode(node, "wd"));
-                item.setHm(parseDoubleNode(node, "hm"));
-                item.setPa(parseDoubleNode(node, "pa"));
-                item.setPs(parseDoubleNode(node, "ps"));
-                item.setSs(parseDoubleNode(node, "ss"));
-                item.setIcsr(parseDoubleNode(node, "icsr"));
-                item.setDsnw(parseDoubleNode(node, "dsnw"));
-                item.setHr3Fhsc(parseDoubleNode(node, "hr3Fhsc"));
-                item.setDc10Tca(parseDoubleNode(node, "dc10Tca"));
-                result.add(item);
-            }
-            return result;
-        } catch (Exception e) {
-            log.warn("[ASOS 파싱 실패] : {}", e.getMessage());
-            return new ArrayList<>();
-        }
-    }
 
-    private List<ForecastWeatherItemDto> parseVilageFcstItems(
-            String json, LocalDate targetDate, DateTimeFormatter iso) {
-        try {
-            JsonNode root = objectMapper.readTree(json);
-            String resultCode = root.path("response").path("header").path("resultCode").asText();
-            if (!"00".equals(resultCode)) {
-                log.warn("[단기예보 API] resultCode={}, msg={}",
-                        resultCode, root.path("response").path("header").path("resultMsg").asText());
-                return new ArrayList<>();
-            }
-            JsonNode items = root.path("response").path("body").path("items").path("item");
-            LocalDate targetEnd = targetDate.plusDays(1);
-            DateTimeFormatter dateFmt   = DateTimeFormatter.BASIC_ISO_DATE;
-            DateTimeFormatter fcstDtFmt = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
-
-            Map<String, ForecastWeatherItemDto> pivot = new LinkedHashMap<>();
-            Map<String, Double> tmnMap = new HashMap<>();
-            Map<String, Double> tmxMap = new HashMap<>();
-
-            for (JsonNode node : items) {
-                String fcstDate = node.path("fcstDate").asText();
-                String fcstTime = node.path("fcstTime").asText();
-                String category = node.path("category").asText();
-                String value    = node.path("fcstValue").asText();
-
-                LocalDate fcstDay = LocalDate.parse(fcstDate, dateFmt);
-                if (fcstDay.isBefore(targetDate) || fcstDay.isAfter(targetEnd)) continue;
-
-                if ("TMN".equals(category)) {
-                    try { tmnMap.put(fcstDate, Double.parseDouble(value)); } catch (Exception ignored) {}
-                    continue;
-                }
-                if ("TMX".equals(category)) {
-                    try { tmxMap.put(fcstDate, Double.parseDouble(value)); } catch (Exception ignored) {}
-                    continue;
-                }
-
-                String key = fcstDate + "_" + fcstTime;
-                pivot.computeIfAbsent(key, k -> {
-                    ForecastWeatherItemDto dto = new ForecastWeatherItemDto();
-                    try {
-                        dto.setTmef(LocalDateTime.parse(fcstDate + fcstTime, fcstDtFmt).atZone(KST).format(iso));
-                    } catch (Exception ex) {
-                        dto.setTmef(fcstDate + "T" + fcstTime);
-                    }
-                    return dto;
-                });
-                applyForecastCategory(pivot.get(key), category, value);
-            }
-
-            List<ForecastWeatherItemDto> result = new ArrayList<>(pivot.values());
-            for (ForecastWeatherItemDto dto : result) {
-                String tmef = dto.getTmef();
-                if (tmef != null && tmef.length() >= 10) {
-                    String dateKey = tmef.substring(0, 10).replace("-", "");
-                    if (tmnMap.containsKey(dateKey)) dto.setTmn(tmnMap.get(dateKey));
-                    if (tmxMap.containsKey(dateKey)) dto.setTmx(tmxMap.get(dateKey));
-                }
-            }
-            return result;
-        } catch (Exception e) {
-            log.warn("[단기예보 파싱 실패] : {}", e.getMessage());
-            return new ArrayList<>();
-        }
-    }
-
-    private void applyForecastCategory(ForecastWeatherItemDto dto, String category, String value) {
-        try {
-            switch (category) {
-                case "TMP" -> dto.setTmp(Double.parseDouble(value));
-                case "POP" -> dto.setPop(Double.parseDouble(value));
-                case "PTY" -> dto.setPty(Integer.parseInt(value));
-                case "PCP" -> { try { dto.setPcp(Double.parseDouble(value)); } catch (Exception e) { dto.setPcp(value); } }
-                case "SNO" -> { try { dto.setSno(Double.parseDouble(value)); } catch (Exception e) { dto.setSno(value); } }
-                case "REH" -> dto.setReh(Double.parseDouble(value));
-                case "SKY" -> dto.setSky(Integer.parseInt(value));
-                case "WSD" -> dto.setWsd(Double.parseDouble(value));
-                case "VEC" -> dto.setVec(Double.parseDouble(value));
-                case "UUU" -> dto.setUuu(Double.parseDouble(value));
-                case "VVV" -> dto.setVvv(Double.parseDouble(value));
-            }
-        } catch (Exception ignored) {}
-    }
-
-    private Double parseDoubleNode(JsonNode node, String field) {
-        JsonNode n = node.path(field);
-        if (n.isMissingNode() || n.isNull()) return null;
-        String s = n.asText("").trim();
-        if (s.isEmpty()) return null;
-        try { return Double.parseDouble(s); } catch (NumberFormatException e) { return null; }
-    }
-
-    private String callAsosApi() {
-        String url = UriComponentsBuilder
-                .fromUriString("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList")
-                .queryParam("serviceKey", "YOUR_KEY")
-                .queryParam("numOfRows", "999")
-                .queryParam("pageNo", "1")
-                .queryParam("dataType", "JSON")
-                .queryParam("dataCd", "ASOS")
-                .queryParam("dateCd", "HR")
-                .queryParam("startDt", "20260424")
-                .queryParam("startHh", "00")
-                .queryParam("endDt", "20260501")
-                .queryParam("endHh", "23")
-                .queryParam("stnIds", "108")
-                .build(true)
-                .toUriString();
-        return new RestTemplate().getForObject(url, String.class);
-    }
-
-    private List<Map<String, String>> parseAsosJson(String json) throws Exception {
-        JsonNode root = objectMapper.readTree(json);
-        JsonNode items = root.path("response").path("body").path("items").path("item");
-        List<Map<String, String>> result = new ArrayList<>();
-        for (JsonNode node : items) {
-            Map<String, String> row = new HashMap<>();
-            row.put("tm", node.path("tm").asText());
-            row.put("ta", node.path("ta").asText());
-            row.put("hm", node.path("hm").asText());
-            row.put("ws", node.path("ws").asText());
-            row.put("wd", node.path("wd").asText());
-            row.put("rn", node.path("rn").asText());
-            row.put("si", node.path("icsr").asText());
-            result.add(row);
-        }
-        return result;
-    }
 }

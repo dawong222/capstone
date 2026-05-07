@@ -16,8 +16,11 @@ public class HourlySnapshot {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "station_id")
+    private ChargingStation station;
+
     private LocalDateTime recordedAt;
-    private Integer stationId;
     private Double soc;
     private Integer demandCount;
     private Double pPv;

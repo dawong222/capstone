@@ -19,14 +19,20 @@ public class ScheduleJob {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(unique = true)
     private String requestId;
 
     private LocalDate scheduleTargetDate;
-
     private LocalDateTime createdAt;
-
+    private LocalDateTime completedAt;
     private String status;
+
+    @Column(columnDefinition = "TEXT")
+    private String errorMessage;
 
     @OneToMany(mappedBy = "scheduleJob", cascade = CascadeType.ALL)
     private List<ScheduleResult> results;
+
+    @OneToMany(mappedBy = "scheduleJob", cascade = CascadeType.ALL)
+    private List<ClusterState> clusterStates;
 }

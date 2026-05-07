@@ -1,7 +1,6 @@
 package com.capstone.capstone.service;
 
 import com.capstone.capstone.dto.*;
-import com.capstone.capstone.dto.ai.*;
 import com.capstone.capstone.dto.mqtt.MqttChargerStatusDto;
 import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
 import com.capstone.capstone.dto.mqtt.MqttStationDto;
@@ -19,6 +18,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Slf4j
@@ -54,57 +54,6 @@ public class AiRequestBuilderService {
         return request;
     }
 
-    public ScheduleForecastRequestDto buildScheduleForecastRequest() {
-        LocalDate d = LocalDate.now();
-        LocalDate targetDate = d.plusDays(1);
-        ZonedDateTime callTime = ZonedDateTime.now(KST);
-        DateTimeFormatter iso     = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
-        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("yyyyMMdd");
-        DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HHmmss");
-
-        ScheduleForecastRequestDto req = new ScheduleForecastRequestDto();
-        req.setRequestId(String.format("schedule-forecast-%s-%s-0001",
-                d.format(dateFmt), callTime.format(timeFmt)));
-        req.setRequestTimestamp(callTime.format(iso));
-        req.setScheduleTargetDate(targetDate.toString());
-        req.setScheduleHorizonHours(24);
-
-        TargetWindowDto window = new TargetWindowDto();
-        window.setStart(targetDate.atStartOfDay(KST).format(iso));
-        window.setEnd(targetDate.plusDays(1).atStartOfDay(KST).format(iso));
-        window.setSlotUnit("hour");
-        window.setSlotCount(24);
-        window.setSlotDefinition("slot 0 = 00:00~01:00, slot 23 = 23:00~24:00");
-        req.setTargetWindow(window);
-
-        List<ChargingStation> allStations = stationRepository.findAll();
-        allStations.sort(Comparator.comparing(ChargingStation::getId));
-        Map<Integer, String> stationNameMap = new HashMap<>();
-        for (int i = 0; i < allStations.size(); i++) stationNameMap.put(i, allStations.get(i).getName());
-
-        LocalDateTime rangeStart = d.minusDays(7).atStartOfDay();
-        LocalDateTime rangeEnd   = d.atTime(21, 0, 0);
-        List<HourlySnapshot> snapshots =
-                snapshotRepository.findByRecordedAtBetweenOrderByRecordedAt(rangeStart, rangeEnd);
-
-        String startDt     = d.minusDays(7).format(DateTimeFormatter.BASIC_ISO_DATE);
-        String endDt       = d.format(DateTimeFormatter.BASIC_ISO_DATE);
-        String baseDateFmt = d.format(DateTimeFormatter.BASIC_ISO_DATE);
-
-        req.setDemandPastDemandHourly(buildDemandPastDemand(snapshots, stationNameMap, iso));
-        req.setDemandPastWeatherHourly(weatherApiService.fetchAsosWeather("108", startDt, endDt, iso));
-        req.setDemandForecastShortTermHourly(weatherApiService.fetchVilageFcst(61, 125, baseDateFmt, targetDate, iso));
-        req.setPvPastGenerationHourly(buildPvPastGeneration(snapshots, iso));
-        req.setPvPastWeatherHourly(weatherApiService.fetchAsosWeather("108", startDt, endDt, iso));
-        req.setPvForecastShortTermHourly(weatherApiService.fetchVilageFcst(61, 125, baseDateFmt, targetDate, iso));
-        req.setStationCurrentStates(buildStationCurrentStates(allStations, callTime, iso));
-        req.setTouPriceHourly(buildTouPriceHourly(targetDate, iso));
-        req.setGridConstraints(buildGridConstraints());
-        req.setEssConstraints(buildEssConstraints());
-        req.setTransferTopology(buildTransferTopology(allStations));
-
-        return req;
-    }
 
     public Map<String, Object> buildRawAiRequest() {
         LocalDate d = LocalDate.now();
@@ -217,6 +166,29 @@ public class AiRequestBuilderService {
         req.put("stations", stationList);
         req.put("station_current_states", buildRawStationList(allStations, latest, ts));
 
+        // 과거 7일치 HourlySnapshot 조회
+        LocalDateTime snapshotFrom = LocalDateTime.now().minusDays(7).truncatedTo(ChronoUnit.HOURS);
+        LocalDateTime snapshotTo   = LocalDateTime.now();
+        List<HourlySnapshot> snapshots = snapshotRepository
+                .findByRecordedAtBetweenOrderByRecordedAt(snapshotFrom, snapshotTo);
+
+        req.put("demand_past_demand_hourly",  buildDemandPastDemandHourly(snapshots, iso));
+        req.put("pv_past_generation_hourly",  buildPvPastGenerationHourly(snapshots, iso));
+
+        // ASOS 과거 날씨 (7일치, 강남 = ASOS 108)
+        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("yyyyMMdd");
+        String asosStart = d.minusDays(7).format(dateFmt);
+        String asosEnd   = d.format(dateFmt);
+        List<Map<String, Object>> asosRaw = weatherApiService.fetchRawAsosItems("108", asosStart, asosEnd);
+        req.put("demand_past_weather_hourly", buildAsosWeatherHourly(asosRaw, "ASOS_108", "Gangnam", iso));
+        req.put("pv_past_weather_hourly",     buildAsosWeatherHourly(asosRaw, "ASOS_108", "Gangnam/PV site", iso));
+
+        // 단기예보 (내일 24시간, 강남 격자 nx=61 ny=125)
+        List<Map<String, Object>> forecastRaw =
+                weatherApiService.fetchRawForecastItems(61, 125, d.format(dateFmt), targetDate);
+        req.put("demand_forecast_short_term_hourly", buildForecastWeatherHourly(forecastRaw, "Gangnam forecast grid"));
+        req.put("pv_forecast_short_term_hourly",     buildForecastWeatherHourly(forecastRaw, "Gangnam PV forecast grid"));
+
         return req;
     }
 
@@ -274,14 +246,9 @@ public class AiRequestBuilderService {
             List<Map<String, Object>> chargers = new ArrayList<>();
             if (hasMqtt) {
                 for (MqttChargerStatusDto cs : latest.getStations().get(i).getPayload().getChargerStatus()) {
-                    String type = (cs.getChargerId() == 0 || cs.getChargerId() == 3) ? "fast" : "slow";
-                    double ratedPower = "fast".equals(type) ? 50.0 : 7.0;
                     double power = cs.isHasDemand() ? 7.0 : 0.0;
                     Map<String, Object> c = new LinkedHashMap<>();
                     c.put("charger_id",       cs.getChargerId());
-                    c.put("type",             type);
-                    c.put("charger_type",     type);
-                    c.put("rated_power_kw",   ratedPower);
                     c.put("is_active",        cs.isHasDemand());
                     c.put("has_demand",       cs.isHasDemand());
                     c.put("power_demand_kw",  power);
@@ -293,6 +260,137 @@ public class AiRequestBuilderService {
             stations.add(s);
         }
         return stations;
+    }
+
+    // ─── 날씨 데이터 빌더 ────────────────────────────────────────────────
+
+    private List<Map<String, Object>> buildAsosWeatherHourly(
+            List<Map<String, Object>> asosRaw, String source, String locationName, DateTimeFormatter iso) {
+        DateTimeFormatter asosFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Map<String, Object> r : asosRaw) {
+            String tmRaw = String.valueOf(r.getOrDefault("tm", ""));
+            String ts;
+            try {
+                ts = LocalDateTime.parse(tmRaw, asosFmt).atZone(KST).format(iso);
+            } catch (Exception e) {
+                ts = tmRaw;
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("timestamp",               ts);
+            row.put("tm",                      ts);
+            row.put("source",                  source);
+            row.put("location_name",           locationName);
+            row.put("ta",                      toDouble(r, "ta"));
+            row.put("temperature_c",           toDouble(r, "ta"));
+            row.put("rn",                      toDouble(r, "rn"));
+            row.put("precipitation_mm",        toDouble(r, "rn"));
+            row.put("ws",                      toDouble(r, "ws"));
+            row.put("wind_speed_ms",           toDouble(r, "ws"));
+            row.put("wd",                      toDouble(r, "wd"));
+            row.put("wind_direction_deg",      toDouble(r, "wd"));
+            row.put("hm",                      toDouble(r, "hm"));
+            row.put("humidity_pct",            toDouble(r, "hm"));
+            row.put("pa",                      toDouble(r, "pa"));
+            row.put("pressure_hpa",            toDouble(r, "pa"));
+            row.put("ps",                      toDouble(r, "ps"));
+            row.put("sea_level_pressure_hpa",  toDouble(r, "ps"));
+            row.put("ss",                      toDouble(r, "ss"));
+            row.put("sunshine_hours",          toDouble(r, "ss"));
+            row.put("icsr",                    toDouble(r, "icsr"));
+            row.put("solar_radiation_mj_m2",   toDouble(r, "icsr"));
+            row.put("dsnw",                    toDouble(r, "dsnw"));
+            row.put("snow_cm",                 toDouble(r, "dsnw"));
+            row.put("hr3Fhsc",                 toDouble(r, "hr3Fhsc"));
+            row.put("new_snow_3h_cm",          toDouble(r, "hr3Fhsc"));
+            row.put("dc10Tca",                 toDouble(r, "dc10Tca"));
+            row.put("cloud_amount",            toDouble(r, "dc10Tca"));
+            list.add(row);
+        }
+        return list;
+    }
+
+    private List<Map<String, Object>> buildForecastWeatherHourly(
+            List<Map<String, Object>> forecastRaw, String forecastLocation) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Map<String, Object> r : forecastRaw) {
+            String ts = String.valueOf(r.getOrDefault("tm", ""));
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("timestamp",        ts);
+            row.put("tmef",             ts);
+            row.put("forecast_location", forecastLocation);
+            row.put("TMP",  toDouble(r, "tmp"));
+            row.put("POP",  toDouble(r, "pop"));
+            row.put("PTY",  toDouble(r, "pty").intValue());
+            row.put("PCP",  toDouble(r, "pcp"));
+            row.put("SNO",  toDouble(r, "sno"));
+            row.put("REH",  toDouble(r, "reh"));
+            row.put("SKY",  toDouble(r, "sky").intValue());
+            row.put("WSD",  toDouble(r, "wsd"));
+            row.put("VEC",  toDouble(r, "vec"));
+            row.put("UUU",  toDouble(r, "uuu"));
+            row.put("VVV",  toDouble(r, "vvv"));
+            row.put("TMN",  toDouble(r, "tmn"));
+            row.put("TMX",  toDouble(r, "tmx"));
+            row.put("LGT",  toDouble(r, "lgt").intValue());
+            list.add(row);
+        }
+        return list;
+    }
+
+    private Double toDouble(Map<String, Object> map, String key) {
+        Object v = map.get(key);
+        if (v == null) return 0.0;
+        if (v instanceof Number) return ((Number) v).doubleValue();
+        try { return Double.parseDouble(v.toString().trim()); } catch (Exception e) { return 0.0; }
+    }
+
+    // ─── 과거 수요/발전 데이터 빌더 ──────────────────────────────────────
+
+    private List<Map<String, Object>> buildDemandPastDemandHourly(
+            List<HourlySnapshot> snapshots, DateTimeFormatter iso) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (HourlySnapshot s : snapshots) {
+            if (s.getStation() == null || s.getPLoad() == null) continue;
+            ZonedDateTime slotStart = s.getRecordedAt().atZone(KST);
+            ZonedDateTime slotEnd   = slotStart.plusHours(1);
+            String ts = slotStart.format(iso);
+
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("station_id",   s.getStation().getStationIndex());
+            row.put("station_name", s.getStation().getName());
+            row.put("timestamp",    ts);
+            row.put("tm",           ts);
+            row.put("slot_start",   ts);
+            row.put("slot_end",     slotEnd.format(iso));
+            row.put("demand_kwh",   s.getPLoad() / 1000.0);
+            list.add(row);
+        }
+        return list;
+    }
+
+    private List<Map<String, Object>> buildPvPastGenerationHourly(
+            List<HourlySnapshot> snapshots, DateTimeFormatter iso) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (HourlySnapshot s : snapshots) {
+            // PV는 물리 스테이션(stationIndex=0)에서만 측정
+            if (s.getStation() == null || !Integer.valueOf(0).equals(s.getStation().getStationIndex())) continue;
+            if (s.getPPv() == null) continue;
+            ZonedDateTime slotStart = s.getRecordedAt().atZone(KST);
+            ZonedDateTime slotEnd   = slotStart.plusHours(1);
+            String ts = slotStart.format(iso);
+            double genKwh = s.getPPv() / 1000.0;
+
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("timestamp",          ts);
+            row.put("tm",                 ts);
+            row.put("slot_start",         ts);
+            row.put("slot_end",           slotEnd.format(iso));
+            row.put("gen_kwh",            genKwh);
+            row.put("pv_generation_kwh",  genKwh);
+            list.add(row);
+        }
+        return list;
     }
 
     // ─── private builders ─────────────────────────────────────────────
@@ -347,130 +445,5 @@ public class AiRequestBuilderService {
         return dto;
     }
 
-    private List<DemandPastDemandItemDto> buildDemandPastDemand(
-            List<HourlySnapshot> snapshots, Map<Integer, String> nameMap, DateTimeFormatter iso) {
-        List<DemandPastDemandItemDto> items = new ArrayList<>();
-        for (HourlySnapshot s : snapshots) {
-            String name = nameMap.getOrDefault(s.getStationId(), "Station-" + s.getStationId());
-            ZonedDateTime slotStart = s.getRecordedAt().atZone(KST);
-            String tm     = slotStart.format(iso);
-            String slotEnd = slotStart.plusHours(1).format(iso);
-            double demandKwh = s.getPLoad() != null ? s.getPLoad() / 1000.0 : 0.0;
-            items.add(new DemandPastDemandItemDto(tm, name, tm, slotEnd, demandKwh));
-        }
-        return items;
-    }
-
-    private List<PvPastGenerationItemDto> buildPvPastGeneration(
-            List<HourlySnapshot> snapshots, DateTimeFormatter iso) {
-        List<PvPastGenerationItemDto> items = new ArrayList<>();
-        snapshots.stream()
-                .filter(s -> s.getStationId() != null && s.getStationId() == 0)
-                .forEach(s -> {
-                    ZonedDateTime slotStart = s.getRecordedAt().atZone(KST);
-                    String tm     = slotStart.format(iso);
-                    String slotEnd = slotStart.plusHours(1).format(iso);
-                    double genKwh = s.getPPv() != null ? s.getPPv() / 1000.0 : 0.0;
-                    items.add(new PvPastGenerationItemDto(tm, tm, slotEnd, genKwh));
-                });
-        return items;
-    }
-
-    private List<StationCurrentStateItemDto> buildStationCurrentStates(
-            List<ChargingStation> allStations, ZonedDateTime callTime, DateTimeFormatter iso) {
-        MqttPayloadDto latest = dataProcessingService.getLatestData();
-        String timestamp = callTime.format(iso);
-        List<StationCurrentStateItemDto> states = new ArrayList<>();
-
-        for (int i = 0; i < allStations.size(); i++) {
-            ChargingStation station = allStations.get(i);
-            StationCurrentStateItemDto state = new StationCurrentStateItemDto();
-            state.setStationId(i);
-            state.setStationName(station.getName());
-            state.setPhysical(true);
-            state.setTimestamp(timestamp);
-            state.setErrorCode(0);
-
-            boolean hasMqtt = latest != null && latest.getStations() != null
-                    && i < latest.getStations().size();
-
-            if (hasMqtt) {
-                MqttStationDto mqttStation = latest.getStations().get(i);
-                state.setPhysical(mqttStation.getHeader().isPhysical());
-                state.setEssSoc(mqttStation.getPayload().getStateOfCharge().getSoc());
-
-                List<MqttChargerStatusDto> csList = mqttStation.getPayload().getChargerStatus();
-                state.setChargerCount(csList.size());
-
-                List<ChargerStateItemDto> chargers = new ArrayList<>();
-                for (MqttChargerStatusDto cs : csList) {
-                    ChargerStateItemDto cd = new ChargerStateItemDto();
-                    cd.setChargerId(String.format("ch-%03d", cs.getChargerId()));
-                    cd.setChargerType("fast");
-                    cd.setRatedPowerKw(100.0);
-                    cd.setActive(cs.isHasDemand());
-                    cd.setCurrentPowerKw(cs.isHasDemand() ? 7.0 : 0.0);
-                    chargers.add(cd);
-                }
-                state.setChargers(chargers);
-            } else {
-                state.setEssSoc(0.5);
-                state.setChargerCount(0);
-                state.setChargers(new ArrayList<>());
-            }
-            states.add(state);
-        }
-        return states;
-    }
-
-    private List<TouPriceItemDto> buildTouPriceHourly(LocalDate targetDate, DateTimeFormatter iso) {
-        List<TouPriceItemDto> prices = new ArrayList<>();
-        for (int slot = 0; slot < 24; slot++) {
-            ZonedDateTime start = targetDate.atTime(slot, 0).atZone(KST);
-            ZonedDateTime end   = start.plusHours(1);
-            String level; double price;
-            if (slot >= 23 || slot < 9)                                        { level = "off_peak";  price = 93.3;  }
-            else if ((slot >= 10 && slot < 12) || (slot >= 13 && slot < 17))  { level = "on_peak";   price = 229.5; }
-            else                                                                { level = "mid_peak";  price = 146.9; }
-            prices.add(new TouPriceItemDto(slot, start.format(iso), end.format(iso), level, price));
-        }
-        return prices;
-    }
-
-    private GridConstraintsDto buildGridConstraints() {
-        GridConstraintsDto grid = new GridConstraintsDto();
-        grid.setClusterGridLimitKw(500.0);
-        grid.setStationGridLimitKw(120.0);
-        grid.setPeakLimitKw(500.0);
-        return grid;
-    }
-
-    private EssConstraintsDto buildEssConstraints() {
-        EssConstraintsDto ess = new EssConstraintsDto();
-        ess.setEssCapacityKwhPerStation(100.0);
-        ess.setEssMinSoc(0.1);
-        ess.setEssMaxSoc(0.9);
-        ess.setEssMaxChargeKw(50.0);
-        ess.setEssMaxDischargeKw(50.0);
-        ess.setRoundTripEfficiency(0.85);
-        return ess;
-    }
-
-    private TransferTopologyDto buildTransferTopology(List<ChargingStation> allStations) {
-        TransferTopologyDto topology = new TransferTopologyDto();
-        topology.setTransferEnabled(true);
-        topology.setStationOrder(allStations.stream().map(ChargingStation::getName).toList());
-        topology.setAdjacencyMatrix5x5(List.of(
-                List.of(0,1,1,0,0), List.of(1,0,1,1,0), List.of(1,1,0,1,1),
-                List.of(0,1,1,0,1), List.of(0,0,1,1,0)));
-        topology.setTransferCapacityKwMatrix5x5(List.of(
-                List.of(0,50,50,0,0), List.of(50,0,50,50,0), List.of(50,50,0,50,50),
-                List.of(0,50,50,0,50), List.of(0,0,50,50,0)));
-        topology.setTransferLossRateMatrix5x5(List.of(
-                List.of(0.0,0.02,0.02,0.0,0.0), List.of(0.02,0.0,0.02,0.02,0.0),
-                List.of(0.02,0.02,0.0,0.02,0.02), List.of(0.0,0.02,0.02,0.0,0.02),
-                List.of(0.0,0.0,0.02,0.02,0.0)));
-        return topology;
-    }
 
 }

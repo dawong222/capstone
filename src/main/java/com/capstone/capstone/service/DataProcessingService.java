@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class DataProcessingService {
 
     private final ObjectMapper objectMapper;
+    private final TelemetryPersistenceService persistenceService;
 
     // 최신 MQTT 데이터 (스레드 안전)
     private final AtomicReference<MqttPayloadDto> latestData = new AtomicReference<>();
@@ -46,6 +47,7 @@ public class DataProcessingService {
 
             latestData.set(data);
             broadcast(data);
+            persistenceService.persist(data);
 
             return data;
 

@@ -56,21 +56,4 @@ public class AiService {
         return response.getBody();
     }
 
-    /** Raw Map을 AI 서버에 POST하고 응답을 AiResponseDto로 파싱해 반환 */
-    public AiResponseDto sendRawAndParse(Map<String, Object> payload) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
-
-        log.info("[AI 서버 전송 (v2)] url={}", AI_URL);
-        ResponseEntity<AiResponseDto> response = restTemplate.exchange(
-                AI_URL,
-                HttpMethod.POST,
-                entity,
-                AiResponseDto.class
-        );
-        log.info("[AI 서버 응답 (v2)] status={}", response.getStatusCode());
-        return response.getBody();
-    }
 }

@@ -8,13 +8,15 @@ import lombok.Setter;
 @Entity
 @Getter @Setter
 @NoArgsConstructor
+@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"station_id", "charger_index"}))
 public class Charger {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String type;
+    @Column(name = "charger_index", nullable = false)
+    private Integer chargerIndex;   // MQTT chargerId (0-based, 스테이션 내 인덱스)
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_id")

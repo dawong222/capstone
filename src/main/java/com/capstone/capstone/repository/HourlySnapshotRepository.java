@@ -12,8 +12,11 @@ public interface HourlySnapshotRepository extends JpaRepository<HourlySnapshot, 
 
     long countByRecordedAtBetween(LocalDateTime start, LocalDateTime end);
 
-    @Query("SELECT COUNT(h) FROM HourlySnapshot h WHERE h.recordedAt >= :start AND h.recordedAt < :end AND h.stationId = 0")
+    @Query("SELECT COUNT(h) FROM HourlySnapshot h WHERE h.recordedAt >= :start AND h.recordedAt < :end AND h.station.stationIndex = 0")
     long countHoursByDate(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     List<HourlySnapshot> findByRecordedAtBetweenOrderByRecordedAt(LocalDateTime start, LocalDateTime end);
+
+    // 7일 초과분 삭제용
+    void deleteByRecordedAtBefore(LocalDateTime cutoff);
 }

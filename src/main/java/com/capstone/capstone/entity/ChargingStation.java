@@ -19,6 +19,11 @@ public class ChargingStation {
 
     private String name;
     private String location;
+
+    @Column(unique = true)
+    private Integer stationIndex;   // MQTT/AI 0-based 인덱스
+
+    private Double essCapacityKwh;
     private Boolean isActive;
 
     @OneToMany(mappedBy = "station", cascade = CascadeType.ALL)

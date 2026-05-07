@@ -34,18 +34,24 @@ public class ScheduleResultService {
         job.setScheduleTargetDate(LocalDate.now().plusDays(1));
         scheduleJobRepository.save(job);
 
-        // AI 응답의 station_id는 0-based 인덱스 → DB 실제 ID와 매핑
+        // AI 응답의 station_id는 0-based 인덱스 → stationIndex로 조회
         List<ChargingStation> allStations = stationRepository.findAll();
         allStations.sort(Comparator.comparing(ChargingStation::getId));
 
+        // stationIndex → ChargingStation 맵 (Transfer 타겟 조회용)
+        Map<Integer, ChargingStation> indexToStation = allStations.stream()
+                .filter(s -> s.getStationIndex() != null)
+                .collect(Collectors.toMap(ChargingStation::getStationIndex, s -> s));
+
         for (StationScheduleDto stationDto : dto.getStationDayAheadSchedule()) {
             int idx = stationDto.getStationId() != null ? stationDto.getStationId().intValue() : 0;
-            ChargingStation station = (idx >= 0 && idx < allStations.size())
-                    ? allStations.get(idx)
-                    : stationRepository.findById(stationDto.getStationId())
-                        .orElseThrow(() -> new RuntimeException("Station not found: " + stationDto.getStationId()));
+            ChargingStation station = indexToStation.getOrDefault(idx,
+                    (idx >= 0 && idx < allStations.size()) ? allStations.get(idx) : null);
+            if (station == null) {
+                log.warn("[스케줄 저장] stationIndex={} 매핑 실패 - 스킵", idx);
+                continue;
+            }
 
-            // 전체 그래프를 먼저 구성한 뒤 한 번에 save → cascade 정상 동작
             ScheduleResult result = new ScheduleResult();
             result.setScheduleJob(job);
             result.setStation(station);
@@ -67,9 +73,15 @@ public class ScheduleResultService {
 
                 if (planDto.getTransfer() != null) {
                     for (TransferDto t : planDto.getTransfer()) {
+                        int targetIdx = t.getTargetStationId() != null ? t.getTargetStationId().intValue() : -1;
+                        ChargingStation targetStation = indexToStation.get(targetIdx);
+                        if (targetStation == null) {
+                            log.warn("[스케줄 저장] Transfer 대상 stationIndex={} 없음 - 스킵", targetIdx);
+                            continue;
+                        }
                         Transfer transfer = new Transfer();
                         transfer.setHourlyPlan(plan);
-                        transfer.setTargetStationId(t.getTargetStationId());
+                        transfer.setTargetStation(targetStation);
                         transfer.setPower(t.getPower());
                         plan.getTransfers().add(transfer);
                     }
@@ -80,6 +92,10 @@ public class ScheduleResultService {
 
             scheduleResultRepository.save(result);
         }
+
+        job.setCompletedAt(LocalDateTime.now());
+        job.setStatus("SUCCESS");
+        scheduleJobRepository.save(job);
 
         log.info("[스케줄 저장 완료] requestId={}, 스테이션 수={}",
                 dto.getRequestId(), dto.getStationDayAheadSchedule().size());
@@ -137,7 +153,10 @@ public class ScheduleResultService {
         List<TransferDto> transfers = plan.getTransfers().stream()
                 .map(t -> {
                     TransferDto td = new TransferDto();
-                    td.setTargetStationId(t.getTargetStationId());
+                    // AI가 사용하는 0-based stationIndex로 반환
+                    td.setTargetStationId(t.getTargetStation() != null
+                            ? t.getTargetStation().getStationIndex().longValue()
+                            : null);
                     td.setPower(t.getPower());
                     return td;
                 })

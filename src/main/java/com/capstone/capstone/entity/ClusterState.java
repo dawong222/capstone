@@ -15,11 +15,12 @@ public class ClusterState {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Integer timeIndex;
-    private Integer dayOfWeek;
+    private Integer timeIndex;      // 0~23
+    private String touLevel;        // off_peak / mid_peak / on_peak
     private Double touPrice;
     private Double gridLimit;
     private Boolean transferEnabled;
+    private Integer dayOfWeek;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "schedule_job_id")

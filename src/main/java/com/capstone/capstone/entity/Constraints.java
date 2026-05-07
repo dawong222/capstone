@@ -17,8 +17,11 @@ public class Constraints {
 
     private Double socMin;
     private Double socMax;
-    private Double essMaxCharge;
-    private Double essMaxDischarge;
+    private Double essMaxCharge;       // kW
+    private Double essMaxDischarge;    // kW
+    private Double essCapacityKwh;     // kWh
+    private Double gridImportLimitKw;
+    private Double gridExportLimitKw;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_id", unique = true)

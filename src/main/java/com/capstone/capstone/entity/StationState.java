@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
@@ -19,10 +20,7 @@ public class StationState {
 
     private Double soc;
     private Integer demandCount;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "schedule_job_id")
-    private ScheduleJob scheduleJob;
+    private LocalDateTime updatedAt;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_id")

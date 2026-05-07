@@ -4,12 +4,15 @@ import com.capstone.capstone.dto.*;
 import com.capstone.capstone.dto.mqtt.MqttChargerStatusDto;
 import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
 import com.capstone.capstone.dto.mqtt.MqttStationDto;
+import com.capstone.capstone.entity.ChargingStation;
 import com.capstone.capstone.entity.HourlySnapshot;
+import com.capstone.capstone.repository.ChargingStationRepository;
 import com.capstone.capstone.repository.HourlySnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -20,6 +23,7 @@ import java.util.Map;
 public class HourlyDataService {
 
     private final HourlySnapshotRepository snapshotRepository;
+    private final ChargingStationRepository stationRepository;
     private final DataProcessingService dataProcessingService;
     private final AiService aiService;
     private final AiRequestBuilderService aiRequestBuilderService;
@@ -37,19 +41,27 @@ public class HourlyDataService {
         LocalDateTime now = LocalDateTime.now();
         int stationCount = latest.getStations().size();
 
-        for (MqttStationDto station : latest.getStations()) {
+        for (MqttStationDto mqttStation : latest.getStations()) {
+            int stationIndex = mqttStation.getHeader().getStationId();
+            ChargingStation dbStation = stationRepository.findByStationIndex(stationIndex)
+                    .orElse(null);
+            if (dbStation == null) {
+                log.warn("[정각 저장] stationIndex={} 에 해당하는 스테이션 없음 - 스킵", stationIndex);
+                continue;
+            }
+
             HourlySnapshot snapshot = new HourlySnapshot();
+            snapshot.setStation(dbStation);
             snapshot.setRecordedAt(now);
-            snapshot.setStationId(station.getHeader().getStationId());
-            snapshot.setSoc(station.getPayload().getStateOfCharge().getSoc());
-            snapshot.setCapacityWh(station.getPayload().getStateOfCharge().getCapacityWh());
-            snapshot.setDemandCount((int) station.getPayload().getChargerStatus().stream()
+            snapshot.setSoc(mqttStation.getPayload().getStateOfCharge().getSoc());
+            snapshot.setCapacityWh(mqttStation.getPayload().getStateOfCharge().getCapacityWh());
+            snapshot.setDemandCount((int) mqttStation.getPayload().getChargerStatus().stream()
                     .filter(MqttChargerStatusDto::isHasDemand).count());
-            snapshot.setPPv(station.getPayload().getPowerMetricsW().getPPv());
-            snapshot.setPLoad(station.getPayload().getPowerMetricsW().getPLoad());
-            snapshot.setPEss(station.getPayload().getPowerMetricsW().getPEss());
-            snapshot.setPGrid(station.getPayload().getPowerMetricsW().getPGrid());
-            snapshot.setPTr(station.getPayload().getPowerMetricsW().getPTr());
+            snapshot.setPPv(mqttStation.getPayload().getPowerMetricsW().getPPv());
+            snapshot.setPLoad(mqttStation.getPayload().getPowerMetricsW().getPLoad());
+            snapshot.setPEss(mqttStation.getPayload().getPowerMetricsW().getPEss());
+            snapshot.setPGrid(mqttStation.getPayload().getPowerMetricsW().getPGrid());
+            snapshot.setPTr(mqttStation.getPayload().getPowerMetricsW().getPTr());
             snapshotRepository.save(snapshot);
         }
 
@@ -65,9 +77,16 @@ public class HourlyDataService {
         }
     }
 
+    @Transactional
     @Scheduled(cron = "0 10 22 * * *")
     public void sendDailyAiRequest() {
         log.info("[22:10 AI 전송] 스케줄 시작");
+
+        // 7일치 초과 스냅샷 삭제
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(7);
+        snapshotRepository.deleteByRecordedAtBefore(cutoff);
+        log.info("[스냅샷 정리] {} 이전 데이터 삭제 완료", cutoff.toLocalDate());
+
         try {
             Map<String, Object> payload = aiRequestBuilderService.buildRawAiRequest();
             AiResponseDto response = aiService.sendRaw(payload);
