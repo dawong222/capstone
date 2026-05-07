@@ -1,6 +1,5 @@
 package com.capstone.capstone.controller;
 
-import com.capstone.capstone.dto.AiRequestDto;
 import com.capstone.capstone.dto.AiResponseDto;
 import com.capstone.capstone.service.AiService;
 import com.capstone.capstone.service.SchedulingService;
@@ -28,18 +27,6 @@ public class AiController {
         schedulingService.saveAiResult(dto);
 
         return ResponseEntity.ok().build();
-    }
-
-    @PostMapping("/request")
-    public ResponseEntity<?> requestAiScheduling() {
-
-        AiRequestDto request = schedulingService.buildAiRequest();
-
-        AiResponseDto response = schedulingService.callAiServer(request);
-
-        schedulingService.saveAiResult(response);
-
-        return ResponseEntity.ok(response);
     }
 
     // ─── v2: raw 데이터 그대로 AI 서버 전송 ──────────────────────
