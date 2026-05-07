@@ -1,6 +1,5 @@
 package com.capstone.capstone.controller;
 
-import com.capstone.capstone.dto.AiRequestDto;
 import com.capstone.capstone.dto.AiResponseDto;
 import com.capstone.capstone.service.AiService;
 import com.capstone.capstone.service.SchedulingService;
@@ -32,13 +31,9 @@ public class AiController {
 
     @PostMapping("/request")
     public ResponseEntity<?> requestAiScheduling() {
-
-        AiRequestDto request = schedulingService.buildAiRequest();
-
-        AiResponseDto response = schedulingService.callAiServer(request);
-
+        Map<String, Object> payload = schedulingService.buildRawAiRequest();
+        AiResponseDto response = aiService.sendRawAndParse(payload);
         schedulingService.saveAiResult(response);
-
         return ResponseEntity.ok(response);
     }
 
@@ -50,11 +45,12 @@ public class AiController {
         return ResponseEntity.ok(schedulingService.buildRawAiRequest());
     }
 
-    /** Raw 데이터를 AI 서버에 전송하고 응답 반환 */
+    /** Raw 데이터를 AI 서버에 전송하고 결과 저장 */
     @PostMapping("/v2/send")
     public ResponseEntity<String> sendRawToAi() {
         Map<String, Object> payload = schedulingService.buildRawAiRequest();
-        String response = aiService.sendRaw(payload);
-        return ResponseEntity.ok(response);
+        AiResponseDto response = aiService.sendRawAndParse(payload);
+        schedulingService.saveAiResult(response);
+        return ResponseEntity.ok("스케줄 저장 완료: requestId=" + response.getRequestId());
     }
 }

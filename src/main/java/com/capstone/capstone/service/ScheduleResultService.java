@@ -30,19 +30,26 @@ public class ScheduleResultService {
         ScheduleJob job = new ScheduleJob();
         job.setRequestId(dto.getRequestId());
         job.setCreatedAt(LocalDateTime.now());
-        job.setStatus(dto.getStatus().getMessage());
+        job.setStatus(dto.getStatus() != null ? dto.getStatus().getMessage() : "SUCCESS");
         job.setScheduleTargetDate(LocalDate.now().plusDays(1));
         scheduleJobRepository.save(job);
 
-        for (StationScheduleDto stationDto : dto.getStationDayAheadSchedule()) {
-            ChargingStation station = stationRepository.findById(stationDto.getStationId())
-                    .orElseThrow(() -> new RuntimeException("Station not found: " + stationDto.getStationId()));
+        // AI 응답의 station_id는 0-based 인덱스 → DB 실제 ID와 매핑
+        List<ChargingStation> allStations = stationRepository.findAll();
+        allStations.sort(Comparator.comparing(ChargingStation::getId));
 
+        for (StationScheduleDto stationDto : dto.getStationDayAheadSchedule()) {
+            int idx = stationDto.getStationId() != null ? stationDto.getStationId().intValue() : 0;
+            ChargingStation station = (idx >= 0 && idx < allStations.size())
+                    ? allStations.get(idx)
+                    : stationRepository.findById(stationDto.getStationId())
+                        .orElseThrow(() -> new RuntimeException("Station not found: " + stationDto.getStationId()));
+
+            // 전체 그래프를 먼저 구성한 뒤 한 번에 save → cascade 정상 동작
             ScheduleResult result = new ScheduleResult();
             result.setScheduleJob(job);
             result.setStation(station);
             result.setHourlyPlans(new ArrayList<>());
-            scheduleResultRepository.save(result);
 
             List<HourlyPlanDto> plans = stationDto.getHourlyPlan() == null
                     ? Collections.emptyList()
@@ -57,7 +64,6 @@ public class ScheduleResultService {
                 plan.setGridUsage(planDto.getGridUsage());
                 plan.setPvPriority(planDto.getPvPriority());
                 plan.setTransfers(new ArrayList<>());
-                result.getHourlyPlans().add(plan);
 
                 if (planDto.getTransfer() != null) {
                     for (TransferDto t : planDto.getTransfer()) {
@@ -68,7 +74,11 @@ public class ScheduleResultService {
                         plan.getTransfers().add(transfer);
                     }
                 }
+
+                result.getHourlyPlans().add(plan);
             }
+
+            scheduleResultRepository.save(result);
         }
 
         log.info("[스케줄 저장 완료] requestId={}, 스테이션 수={}",

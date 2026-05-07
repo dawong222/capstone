@@ -16,6 +16,22 @@ app = FastAPI()
 last_request: dict = {}
 
 
+def _make_hourly_plan(hour: int) -> dict:
+    """시간대별 ESS 제어 결정 생성 (테스트용 더미 스케줄)"""
+    if 0 <= hour < 8 or 22 <= hour < 24:
+        # 심야 저가 시간대: ESS 충전
+        return {"hour": hour, "ess_mode": "CHARGE", "ess_power": 30.0,
+                "grid_usage": 40.0, "pv_priority": 0.3, "transfer": []}
+    elif 11 <= hour < 18:
+        # 피크 시간대: ESS 방전
+        return {"hour": hour, "ess_mode": "DISCHARGE", "ess_power": -30.0,
+                "grid_usage": 5.0, "pv_priority": 0.9, "transfer": []}
+    else:
+        # 그 외: 대기
+        return {"hour": hour, "ess_mode": "IDLE", "ess_power": 0.0,
+                "grid_usage": 15.0, "pv_priority": 0.6, "transfer": []}
+
+
 @app.post("/ai/control")
 async def receive_request(request: Request):
     global last_request
@@ -25,26 +41,14 @@ async def receive_request(request: Request):
     request_id  = body.get("request_id", "unknown")
     target_date = body.get("schedule_target_date", "unknown")
 
-    demand_count  = len(body.get("demand_past_demand_hourly", []))
-    d_weather     = len(body.get("demand_past_weather_hourly", []))
-    d_forecast    = len(body.get("demand_forecast_short_term_hourly", []))
-    pv_gen        = len(body.get("pv_past_generation_hourly", []))
-    pv_weather    = len(body.get("pv_past_weather_hourly", []))
-    pv_forecast   = len(body.get("pv_forecast_short_term_hourly", []))
-    stations      = len(body.get("station_current_states", []))
+    stations_data = body.get("stations", [])
     tou           = len(body.get("tou_price_hourly", []))
 
     log.info("=" * 60)
     log.info(f"[수신] request_id      : {request_id}")
     log.info(f"[수신] target_date     : {target_date}")
-    log.info(f"[수신] demand_past_demand_hourly        : {demand_count}건")
-    log.info(f"[수신] demand_past_weather_hourly       : {d_weather}건")
-    log.info(f"[수신] demand_forecast_short_term_hourly: {d_forecast}건")
-    log.info(f"[수신] pv_past_generation_hourly        : {pv_gen}건")
-    log.info(f"[수신] pv_past_weather_hourly           : {pv_weather}건")
-    log.info(f"[수신] pv_forecast_short_term_hourly    : {pv_forecast}건")
-    log.info(f"[수신] station_current_states           : {stations}건")
-    log.info(f"[수신] tou_price_hourly                 : {tou}건")
+    log.info(f"[수신] station_count   : {len(stations_data)}개")
+    log.info(f"[수신] tou_price_hourly: {tou}건")
     log.info("=" * 60)
 
     filename = f"received_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -52,7 +56,29 @@ async def receive_request(request: Request):
         json.dump(body, f, ensure_ascii=False, indent=2)
     log.info(f"[저장] {filename} 에 전체 요청 저장 완료")
 
-    return {"status": "ok", "request_id": request_id, "received_at": datetime.now().isoformat()}
+    # 수신된 스테이션 ID 목록 (없으면 0~4 기본값)
+    station_ids = [s.get("station_id", i) for i, s in enumerate(stations_data)]
+    if not station_ids:
+        station_ids = list(range(5))
+
+    schedule = [
+        {
+            "station_id": sid,
+            "hourly_plan": [_make_hourly_plan(h) for h in range(24)]
+        }
+        for sid in station_ids
+    ]
+
+    return {
+        "request_id": request_id,
+        "timestamp": datetime.now().isoformat(),
+        "status": {
+            "is_success": True,
+            "error_code": 0,
+            "message": "SUCCESS"
+        },
+        "station_day_ahead_schedule": schedule
+    }
 
 
 @app.get("/ai/request")
