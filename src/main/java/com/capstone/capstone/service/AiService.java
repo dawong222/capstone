@@ -55,19 +55,19 @@ public class AiService {
         return response.getBody();
     }
 
-    /** Raw Map 그대로 AI 서버에 POST, 응답은 String으로 받음 */
-    public String sendRaw(Map<String, Object> payload) {
+    /** Raw Map 그대로 AI 서버에 POST, 응답을 AiResponseDto로 파싱해 반환 */
+    public AiResponseDto sendRaw(Map<String, Object> payload) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
 
         log.info("[AI 서버 전송] url={}", AI_URL);
-        ResponseEntity<String> response = restTemplate.exchange(
+        ResponseEntity<AiResponseDto> response = restTemplate.exchange(
                 AI_URL,
                 HttpMethod.POST,
                 entity,
-                String.class
+                AiResponseDto.class
         );
         log.info("[AI 서버 응답] status={}", response.getStatusCode());
         return response.getBody();

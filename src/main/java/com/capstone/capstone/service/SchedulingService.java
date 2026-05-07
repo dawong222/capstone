@@ -15,18 +15,9 @@ public class SchedulingService {
 
     private final AiRequestBuilderService aiRequestBuilderService;
     private final ScheduleResultService scheduleResultService;
-    private final AiService aiService;
-
-    public AiRequestDto buildAiRequest() {
-        return aiRequestBuilderService.buildAiRequest();
-    }
 
     public Map<String, Object> buildRawAiRequest() {
         return aiRequestBuilderService.buildRawAiRequest();
-    }
-
-    public AiResponseDto callAiServer(AiRequestDto requestDto) {
-        return aiService.requestSchedule(requestDto);
     }
 
     public void saveAiResult(AiResponseDto dto) {

@@ -1,6 +1,6 @@
 package com.capstone.capstone.dto;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -8,7 +8,7 @@ import lombok.Setter;
 @Setter
 public class TransferDto {
 
-    @JsonAlias("target_station_id")
+    @JsonProperty("target_station_id")
     private Long targetStationId;
 
     private double power;
