@@ -1,6 +1,6 @@
 package com.capstone.capstone.dto;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,16 +12,16 @@ public class HourlyPlanDto {
 
     private int hour;
 
-    @JsonProperty("ess_mode")
+    @JsonAlias("ess_mode")
     private String essMode;
 
-    @JsonProperty("ess_power")
+    @JsonAlias("ess_power")
     private double essPower;
 
-    @JsonProperty("grid_usage")
+    @JsonAlias("grid_usage")
     private double gridUsage;
 
-    @JsonProperty("pv_priority")
+    @JsonAlias("pv_priority")
     private double pvPriority;
 
     private List<TransferDto> transfer;

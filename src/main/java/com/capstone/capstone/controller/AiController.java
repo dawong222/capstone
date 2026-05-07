@@ -23,9 +23,16 @@ public class AiController {
 
     @PostMapping("/result")
     public ResponseEntity<Void> receiveAiResult(@RequestBody AiResponseDto dto) {
-
         schedulingService.saveAiResult(dto);
+        return ResponseEntity.ok().build();
+    }
 
+    /** 프론트엔드 트리거: buildRawAiRequest → AI 서버 전송 → 결과 저장 */
+    @PostMapping("/request")
+    public ResponseEntity<Void> requestAiScheduling() {
+        Map<String, Object> payload = schedulingService.buildRawAiRequest();
+        AiResponseDto response = aiService.sendRaw(payload);
+        schedulingService.saveAiResult(response);
         return ResponseEntity.ok().build();
     }
 
