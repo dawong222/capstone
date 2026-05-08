@@ -27,7 +27,6 @@ public class HourlyDataService {
     private final DataProcessingService dataProcessingService;
     private final AiService aiService;
     private final AiRequestBuilderService aiRequestBuilderService;
-    private final ScheduleResultService scheduleResultService;
 
     @Scheduled(cron = "0 0 * * * *")
     public void saveHourlySnapshot() {
@@ -89,11 +88,8 @@ public class HourlyDataService {
 
         try {
             Map<String, Object> payload = aiRequestBuilderService.buildRawAiRequest();
-            AiResponseDto response = aiService.sendRaw(payload);
-            if (response != null) {
-                scheduleResultService.saveAiResult(response);
-            }
-            log.info("[22:10 AI 전송 완료] requestId={}", response != null ? response.getRequestId() : "null");
+            aiService.sendRaw(payload);
+            log.info("[22:10 AI 전송 완료] AI 서버 콜백 대기 중");
         } catch (Exception e) {
             log.error("[22:10 AI 전송 실패] {}", e.getMessage());
         }
@@ -102,11 +98,8 @@ public class HourlyDataService {
     private void triggerAi() {
         try {
             AiRequestDto request = aiRequestBuilderService.buildAiRequest();
-            AiResponseDto response = aiService.requestSchedule(request);
-            if (response != null) {
-                scheduleResultService.saveAiResult(response);
-                log.info("[AI 결과 저장 완료] requestId={}", response.getRequestId());
-            }
+            aiService.requestSchedule(request);
+            log.info("[AI 전송 완료] AI 서버 콜백 대기 중");
         } catch (Exception e) {
             log.error("[AI 전송 실패] {}", e.getMessage());
         }

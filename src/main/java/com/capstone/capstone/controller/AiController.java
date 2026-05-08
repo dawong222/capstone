@@ -5,11 +5,8 @@ import com.capstone.capstone.service.AiService;
 import com.capstone.capstone.service.SchedulingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
 
 import java.util.Map;
 
@@ -27,13 +24,12 @@ public class AiController {
         return ResponseEntity.ok().build();
     }
 
-    /** 프론트엔드 트리거: buildRawAiRequest → AI 서버 전송 → 결과 저장 */
+    /** 프론트엔드 트리거: 요청 빌드 후 AI 서버 전송, 결과는 콜백(/ai/result)으로 수신 */
     @PostMapping("/request")
     public ResponseEntity<Void> requestAiScheduling() {
         Map<String, Object> payload = schedulingService.buildRawAiRequest();
-        AiResponseDto response = aiService.sendRaw(payload);
-        schedulingService.saveAiResult(response);
-        return ResponseEntity.ok().build();
+        aiService.sendRaw(payload);
+        return ResponseEntity.accepted().build();
     }
 
     // ─── v2: raw 데이터 그대로 AI 서버 전송 ──────────────────────
@@ -44,12 +40,11 @@ public class AiController {
         return ResponseEntity.ok(schedulingService.buildRawAiRequest());
     }
 
-    /** Raw 데이터를 AI 서버에 전송, 응답 파싱 후 DB 저장 */
+    /** Raw 데이터를 AI 서버에 전송, 결과는 콜백(/ai/result)으로 수신 */
     @PostMapping("/v2/send")
-    public ResponseEntity<AiResponseDto> sendRawToAi() {
+    public ResponseEntity<Void> sendRawToAi() {
         Map<String, Object> payload = schedulingService.buildRawAiRequest();
-        AiResponseDto response = aiService.sendRaw(payload);
-        schedulingService.saveAiResult(response);
-        return ResponseEntity.ok(response);
+        aiService.sendRaw(payload);
+        return ResponseEntity.accepted().build();
     }
 }
