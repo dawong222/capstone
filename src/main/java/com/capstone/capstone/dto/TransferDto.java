@@ -11,5 +11,6 @@ public class TransferDto {
     @JsonAlias("target_station_id")
     private Long targetStationId;
 
+    @JsonAlias({"power", "transfer_power_kw"})
     private double power;
 }

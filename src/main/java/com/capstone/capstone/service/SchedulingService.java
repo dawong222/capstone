@@ -15,6 +15,7 @@ public class SchedulingService {
 
     private final AiRequestBuilderService aiRequestBuilderService;
     private final ScheduleResultService scheduleResultService;
+    private final ScheduleMqttPublisherService scheduleMqttPublisherService;
 
     public Map<String, Object> buildRawAiRequest() {
         return aiRequestBuilderService.buildRawAiRequest();
@@ -22,6 +23,7 @@ public class SchedulingService {
 
     public void saveAiResult(AiResponseDto dto) {
         scheduleResultService.saveAiResult(dto);
+        scheduleMqttPublisherService.publishSchedule(dto);
     }
 
     public Optional<ScheduleResponseDto> getScheduleByDate(LocalDate date) {
