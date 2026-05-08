@@ -41,7 +41,10 @@ public class WeatherApiService {
 
     public List<Map<String, Object>> fetchRawAsosItems(String stnIds, String startDt, String endDt) {
         try {
-            String body = httpGet(buildAsosUrl(stnIds, startDt, endDt));
+            String url = buildAsosUrl(stnIds, startDt, endDt);
+            log.info("[ASOS raw 요청] url={}", url);
+            String body = httpGet(url);
+            log.info("[ASOS raw 응답] body={}", body.length() > 500 ? body.substring(0, 500) : body);
             JsonNode root = objectMapper.readTree(body);
             String rc  = root.path("response").path("header").path("resultCode").asText();
             String msg = root.path("response").path("header").path("resultMsg").asText();
