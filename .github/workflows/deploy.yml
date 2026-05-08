@@ -62,9 +62,14 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_KEY }}
           script: |
-            docker load < capstone-app.tar
-
             docker stop capstone || true
             docker rm capstone || true
 
+            docker rmi capstone-app || true
+
+            docker load < /home/ubuntu/capstone-app.tar
+
             docker run -d -p 8080:8080 --name capstone capstone-app
+
+            rm -f /home/ubuntu/capstone-app.tar
+            docker image prune -f
