@@ -42,8 +42,14 @@ public class WeatherApiService {
     public List<Map<String, Object>> fetchRawAsosItems(String stnIds, String startDt, String endDt) {
         try {
             String body = httpGet(buildAsosUrl(stnIds, startDt, endDt));
-            JsonNode items = objectMapper.readTree(body)
-                    .path("response").path("body").path("items").path("item");
+            JsonNode root = objectMapper.readTree(body);
+            String rc  = root.path("response").path("header").path("resultCode").asText();
+            String msg = root.path("response").path("header").path("resultMsg").asText();
+            if (!"00".equals(rc)) {
+                log.warn("[ASOS raw 실패] stnIds={} resultCode={} msg={}", stnIds, rc, msg);
+                return new ArrayList<>();
+            }
+            JsonNode items = root.path("response").path("body").path("items").path("item");
             List<Map<String, Object>> result = new ArrayList<>();
             for (JsonNode n : items) {
                 result.add(objectMapper.convertValue(n, Map.class));
@@ -127,7 +133,7 @@ public class WeatherApiService {
     // ─── private helpers ──────────────────────────────────────────────
 
     private String buildAsosUrl(String stnIds, String startDt, String endDt) throws Exception {
-        StringBuilder sb = new StringBuilder("http://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
+        StringBuilder sb = new StringBuilder("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
         sb.append("?").append(URLEncoder.encode("serviceKey", "UTF-8")).append("=").append(asosKey);
         sb.append("&").append(URLEncoder.encode("pageNo",    "UTF-8")).append("=").append(URLEncoder.encode("1",    "UTF-8"));
         sb.append("&").append(URLEncoder.encode("numOfRows", "UTF-8")).append("=").append(URLEncoder.encode("300",  "UTF-8"));
