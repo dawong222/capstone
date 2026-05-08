@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @RestController
@@ -41,8 +42,14 @@ public class DemoController {
             } else {
                 log.info("[Demo] 오늘 스냅샷 이미 존재 ({}건) - 시드 스킵", existing);
             }
-            hourlyDataService.sendDailyAiRequest();
-            log.info("[Demo] AI 요청 전송 완료");
+            CompletableFuture.runAsync(() -> {
+                try {
+                    hourlyDataService.sendDailyAiRequest();
+                    log.info("[Demo] AI 요청 전송 완료");
+                } catch (Exception e) {
+                    log.error("[Demo] AI 요청 전송 실패: {}", e.getMessage(), e);
+                }
+            });
             return ResponseEntity.ok(Map.of("status", "ok", "message", "데모 데이터 시드 완료 및 AI 요청 전송됨"));
         } catch (Exception e) {
             log.error("[Demo] 실패: {}", e.getMessage(), e);
