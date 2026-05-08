@@ -20,11 +20,21 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # 3. build
+      # 3. build (clean으로 캐시 무력화)
       - name: Build
         run: |
           chmod +x gradlew
-          ./gradlew build -x test
+          ./gradlew clean build -x test
+
+      # 3.5. JAR 검증
+      - name: Verify JAR
+        run: |
+          echo "=== build/libs 내용 ==="
+          ls -lh build/libs/
+          echo "=== DemoController 포함 여부 ==="
+          jar tf build/libs/app.jar | grep Demo
+          echo "=== controller 클래스 목록 ==="
+          jar tf build/libs/app.jar | grep controller
 
       # 4. Docker 이미지 생성
       - name: Build Docker image
