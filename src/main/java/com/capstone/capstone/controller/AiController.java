@@ -47,4 +47,11 @@ public class AiController {
         aiService.sendRaw(payload);
         return ResponseEntity.accepted().build();
     }
+
+    /** 샘플/커스텀 payload를 AI 서버에 직접 전송, 결과는 콜백(/ai/result)으로 수신 */
+    @PostMapping("/v2/send-sample")
+    public ResponseEntity<Void> sendSampleToAi(@RequestBody Map<String, Object> payload) {
+        aiService.sendRaw(payload);
+        return ResponseEntity.accepted().build();
+    }
 }
