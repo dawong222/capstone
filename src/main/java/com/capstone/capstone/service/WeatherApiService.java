@@ -13,7 +13,6 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -135,20 +134,19 @@ public class WeatherApiService {
 
     // ─── private helpers ──────────────────────────────────────────────
 
-    private String buildAsosUrl(String stnIds, String startDt, String endDt) throws Exception {
-        StringBuilder sb = new StringBuilder("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
-        sb.append("?").append(URLEncoder.encode("serviceKey", "UTF-8")).append("=").append(asosKey);
-        sb.append("&").append(URLEncoder.encode("pageNo",    "UTF-8")).append("=").append(URLEncoder.encode("1",    "UTF-8"));
-        sb.append("&").append(URLEncoder.encode("numOfRows", "UTF-8")).append("=").append(URLEncoder.encode("300",  "UTF-8"));
-        sb.append("&").append(URLEncoder.encode("dataType",  "UTF-8")).append("=").append(URLEncoder.encode("JSON", "UTF-8"));
-        sb.append("&").append(URLEncoder.encode("dataCd",    "UTF-8")).append("=").append(URLEncoder.encode("ASOS", "UTF-8"));
-        sb.append("&").append(URLEncoder.encode("dateCd",    "UTF-8")).append("=").append(URLEncoder.encode("HR",   "UTF-8"));
-        sb.append("&").append(URLEncoder.encode("startDt",   "UTF-8")).append("=").append(URLEncoder.encode(startDt, "UTF-8"));
-        sb.append("&").append(URLEncoder.encode("startHh",   "UTF-8")).append("=").append(URLEncoder.encode("00",  "UTF-8"));
-        sb.append("&").append(URLEncoder.encode("endDt",     "UTF-8")).append("=").append(URLEncoder.encode(endDt,   "UTF-8"));
-        sb.append("&").append(URLEncoder.encode("endHh",     "UTF-8")).append("=").append(URLEncoder.encode("22",  "UTF-8"));
-        sb.append("&").append(URLEncoder.encode("stnIds",    "UTF-8")).append("=").append(URLEncoder.encode(stnIds,  "UTF-8"));
-        return sb.toString();
+    private String buildAsosUrl(String stnIds, String startDt, String endDt) {
+        return "https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList"
+                + "?serviceKey=" + asosKey
+                + "&pageNo=1"
+                + "&numOfRows=300"
+                + "&dataType=JSON"
+                + "&dataCd=ASOS"
+                + "&dateCd=HR"
+                + "&startDt=" + startDt
+                + "&startHh=00"
+                + "&endDt=" + endDt
+                + "&endHh=23"
+                + "&stnIds=" + stnIds;
     }
 
     private String httpGet(String urlStr) throws Exception {
