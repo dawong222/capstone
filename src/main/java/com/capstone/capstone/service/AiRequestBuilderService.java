@@ -166,8 +166,8 @@ public class AiRequestBuilderService {
         req.put("stations", stationList);
         req.put("station_current_states", buildRawStationList(allStations, latest, ts));
 
-        // 과거 7일치 HourlySnapshot 조회
-        LocalDateTime snapshotFrom = LocalDateTime.now().minusDays(7).truncatedTo(ChronoUnit.HOURS);
+        // 7일 전 자정 ~ 당일 현재 시각 (7일 × 24h + 당일 22h = 190h × 5station = 950건)
+        LocalDateTime snapshotFrom = LocalDate.now().minusDays(7).atStartOfDay();
         LocalDateTime snapshotTo   = LocalDateTime.now();
         List<HourlySnapshot> snapshots = snapshotRepository
                 .findByRecordedAtBetweenOrderByRecordedAt(snapshotFrom, snapshotTo);
