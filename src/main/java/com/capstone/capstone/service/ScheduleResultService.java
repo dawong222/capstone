@@ -43,6 +43,11 @@ public class ScheduleResultService {
                 .filter(s -> s.getStationIndex() != null)
                 .collect(Collectors.toMap(ChargingStation::getStationIndex, s -> s));
 
+        if (dto.getStationDayAheadSchedule() == null) {
+            log.warn("[스케줄 저장] station_day_ahead_schedule 없음 - 저장 스킵");
+            return;
+        }
+
         for (StationScheduleDto stationDto : dto.getStationDayAheadSchedule()) {
             int idx = stationDto.getStationId() != null ? stationDto.getStationId().intValue() : 0;
             ChargingStation station = indexToStation.getOrDefault(idx,
