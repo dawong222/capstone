@@ -1,6 +1,5 @@
 package com.capstone.capstone.service;
 
-import com.capstone.capstone.dto.*;
 import com.capstone.capstone.dto.mqtt.MqttChargerStatusDto;
 import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
 import com.capstone.capstone.dto.mqtt.MqttStationDto;
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 
 @Slf4j
 @Service
@@ -25,8 +23,6 @@ public class HourlyDataService {
     private final HourlySnapshotRepository snapshotRepository;
     private final ChargingStationRepository stationRepository;
     private final DataProcessingService dataProcessingService;
-    private final AiService aiService;
-    private final AiRequestBuilderService aiRequestBuilderService;
 
     @Scheduled(cron = "0 0 * * * *")
     public void saveHourlySnapshot() {
@@ -67,41 +63,14 @@ public class HourlyDataService {
         LocalDateTime startOfDay = now.toLocalDate().atStartOfDay();
         long totalRows = snapshotRepository.countByRecordedAtBetween(startOfDay, now.plusSeconds(1));
         long hoursCollected = stationCount > 0 ? totalRows / stationCount : 0;
-
         log.info("[정각 저장 완료] {}시, 오늘 누적 {}시간분", now.getHour(), hoursCollected);
-
-        if (hoursCollected >= 24) {
-            log.info("[AI 전송] 24시간 데이터 수집 완료 → AI 서버 전송");
-            triggerAi();
-        }
     }
 
     @Transactional
     @Scheduled(cron = "0 10 22 * * *")
-    public void sendDailyAiRequest() {
-        log.info("[22:10 AI 전송] 스케줄 시작");
-
-        // 7일치 초과 스냅샷 삭제
+    public void cleanupOldSnapshots() {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(7);
         snapshotRepository.deleteByRecordedAtBefore(cutoff);
         log.info("[스냅샷 정리] {} 이전 데이터 삭제 완료", cutoff.toLocalDate());
-
-        try {
-            Map<String, Object> payload = aiRequestBuilderService.buildRawAiRequest();
-            aiService.sendRaw(payload);
-            log.info("[22:10 AI 전송 완료] AI 서버 콜백 대기 중");
-        } catch (Exception e) {
-            log.error("[22:10 AI 전송 실패] {}", e.getMessage());
-        }
-    }
-
-    private void triggerAi() {
-        try {
-            AiRequestDto request = aiRequestBuilderService.buildAiRequest();
-            aiService.requestSchedule(request);
-            log.info("[AI 전송 완료] AI 서버 콜백 대기 중");
-        } catch (Exception e) {
-            log.error("[AI 전송 실패] {}", e.getMessage());
-        }
     }
 }

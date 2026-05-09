@@ -23,7 +23,11 @@
       "Bash(git push *)",
       "Bash(git pull *)",
       "Bash(git stash *)",
-      "Bash(Get-Content *)"
+      "Bash(Get-Content *)",
+      "Bash(git rm *)",
+      "Bash(del \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\\\\src\\\\main\\\\java\\\\com\\\\capstone\\\\capstone\\\\entity\\\\DemandHistory.java\")",
+      "Bash(del \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\\\\src\\\\main\\\\java\\\\com\\\\capstone\\\\capstone\\\\repository\\\\DemandHistoryRepository.java\")",
+      "Bash(git commit *)"
     ]
   }
 }

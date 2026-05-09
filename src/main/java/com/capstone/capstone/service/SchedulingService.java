@@ -6,20 +6,14 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class SchedulingService {
 
-    private final AiRequestBuilderService aiRequestBuilderService;
     private final ScheduleResultService scheduleResultService;
     private final ScheduleMqttPublisherService scheduleMqttPublisherService;
-
-    public Map<String, Object> buildRawAiRequest() {
-        return aiRequestBuilderService.buildRawAiRequest();
-    }
 
     public void saveAiResult(AiResponseDto dto) {
         scheduleResultService.saveAiResult(dto);
