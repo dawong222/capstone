@@ -1,5 +1,6 @@
 package com.capstone.capstone.service;
 
+import com.capstone.capstone.dto.AiRequestDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +19,22 @@ public class AiService {
 
     @Value("${ai.server.url}")
     private String AI_URL;
+
+    public void requestSchedule(AiRequestDto requestDto) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<AiRequestDto> entity = new HttpEntity<>(requestDto, headers);
+
+        log.info("[AI 서버 전송] url={}", AI_URL);
+        ResponseEntity<Void> response = restTemplate.exchange(
+                AI_URL,
+                HttpMethod.POST,
+                entity,
+                Void.class
+        );
+        log.info("[AI 서버 전송 완료] status={}", response.getStatusCode());
+    }
 
     /** Raw Map 그대로 AI 서버에 POST, AI 서버가 처리 완료 후 콜백으로 결과 전송 */
     public void sendRaw(Map<String, Object> payload) {

@@ -32,12 +32,6 @@ public class MqttConfig {
     @Value("${mqtt.publish-topic}")
     private String pub_topic;
 
-    @Value("${mqtt.ai-request-topic}")
-    private String aiRequestTopic;
-
-    @Value("${mqtt.schedule-request-topic}")
-    private String scheduleRequestTopic;
-
     @Bean
     public MessageChannel mqttInputChannel(){
         return new DirectChannel();
@@ -71,42 +65,6 @@ public class MqttConfig {
         factory.setConnectionOptions(options);
 
         return factory;
-    }
-
-    @Bean
-    public MessageChannel mqttAiRequestChannel() {
-        return new DirectChannel();
-    }
-
-    @Bean
-    public MessageProducer inboundAiRequest() {
-        MqttPahoMessageDrivenChannelAdapter adapter =
-                new MqttPahoMessageDrivenChannelAdapter(
-                        clientId + "_ai_sub", mqttClientFactory(), aiRequestTopic
-                );
-        adapter.setCompletionTimeout(5000);
-        adapter.setConverter(new DefaultPahoMessageConverter());
-        adapter.setQos(1);
-        adapter.setOutputChannel(mqttAiRequestChannel());
-        return adapter;
-    }
-
-    @Bean
-    public MessageChannel mqttScheduleRequestChannel() {
-        return new DirectChannel();
-    }
-
-    @Bean
-    public MessageProducer inboundScheduleRequest() {
-        MqttPahoMessageDrivenChannelAdapter adapter =
-                new MqttPahoMessageDrivenChannelAdapter(
-                        clientId + "_schedule_sub", mqttClientFactory(), scheduleRequestTopic
-                );
-        adapter.setCompletionTimeout(5000);
-        adapter.setConverter(new DefaultPahoMessageConverter());
-        adapter.setQos(1);
-        adapter.setOutputChannel(mqttScheduleRequestChannel());
-        return adapter;
     }
 
     @Bean
