@@ -19,14 +19,12 @@ public class ScheduleJob {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true, columnDefinition = "TEXT")
+    @Column(unique = true)
     private String requestId;
 
     private LocalDate scheduleTargetDate;
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
-
-    @Column(columnDefinition = "TEXT")
     private String status;
 
     @Column(columnDefinition = "TEXT")
