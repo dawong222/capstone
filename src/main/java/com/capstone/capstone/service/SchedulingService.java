@@ -22,7 +22,6 @@ public class SchedulingService {
     }
 
     public void saveAiResult(AiResponseDto dto) {
-        scheduleResultService.saveAiResult(dto);
         scheduleMqttPublisherService.publishSchedule(dto);
     }
 

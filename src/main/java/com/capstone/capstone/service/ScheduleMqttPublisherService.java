@@ -30,7 +30,7 @@ public class ScheduleMqttPublisherService {
             int stationIdx = station.getStationId() != null ? station.getStationId().intValue() : -1;
             if (stationIdx < 0) continue;
 
-            String topic = "/control/station/" + stationIdx;
+            String topic = "smartgrid/action";
 
             List<Map<String, Object>> hourlyPlan = new ArrayList<>();
             List<HourlyPlanDto> plans = station.getHourlyPlan() != null ? station.getHourlyPlan() : List.of();
