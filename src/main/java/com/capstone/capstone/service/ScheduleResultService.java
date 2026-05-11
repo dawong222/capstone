@@ -108,7 +108,7 @@ public class ScheduleResultService {
 
     @Transactional(readOnly = true)
     public Optional<ScheduleResponseDto> getScheduleByDate(LocalDate date) {
-        return scheduleJobRepository.findByScheduleTargetDate(date)
+        return scheduleJobRepository.findFirstByScheduleTargetDateOrderByCreatedAtDesc(date)
                 .map(this::toScheduleResponseDto);
     }
 

@@ -11,7 +11,7 @@ import java.util.Optional;
 @Repository
 public interface ScheduleJobRepository extends JpaRepository<ScheduleJob, Long> {
 
-    Optional<ScheduleJob> findByScheduleTargetDate(LocalDate date);
+    Optional<ScheduleJob> findFirstByScheduleTargetDateOrderByCreatedAtDesc(LocalDate date);
 
     List<ScheduleJob> findTop10ByOrderByCreatedAtDesc();
 }
