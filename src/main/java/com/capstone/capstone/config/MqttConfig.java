@@ -38,6 +38,9 @@ public class MqttConfig {
     @Value("${mqtt.schedule-request-topic}")
     private String scheduleRequestTopic;
 
+    @Value("${mqtt.simulate-telemetry-topic}")
+    private String simulateTelemetryTopic;
+
     @Bean
     public MessageChannel mqttInputChannel(){
         return new DirectChannel();
@@ -106,6 +109,24 @@ public class MqttConfig {
         adapter.setConverter(new DefaultPahoMessageConverter());
         adapter.setQos(1);
         adapter.setOutputChannel(mqttScheduleRequestChannel());
+        return adapter;
+    }
+
+    @Bean
+    public MessageChannel mqttSimulateTelemetryChannel() {
+        return new DirectChannel();
+    }
+
+    @Bean
+    public MessageProducer inboundSimulateTelemetry() {
+        MqttPahoMessageDrivenChannelAdapter adapter =
+                new MqttPahoMessageDrivenChannelAdapter(
+                        clientId + "_simulate_sub", mqttClientFactory(), simulateTelemetryTopic
+                );
+        adapter.setCompletionTimeout(5000);
+        adapter.setConverter(new DefaultPahoMessageConverter());
+        adapter.setQos(1);
+        adapter.setOutputChannel(mqttSimulateTelemetryChannel());
         return adapter;
     }
 
