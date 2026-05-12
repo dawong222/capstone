@@ -2,12 +2,13 @@ package com.capstone.capstone.controller;
 
 import com.capstone.capstone.dto.AiResponseDto;
 import com.capstone.capstone.service.AiService;
+import com.capstone.capstone.service.DataProcessingService;
 import com.capstone.capstone.service.SchedulingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-
+import java.time.LocalDate;
 import java.util.Map;
 
 @RestController
@@ -17,10 +18,15 @@ public class AiController {
 
     private final SchedulingService schedulingService;
     private final AiService aiService;
+    private final DataProcessingService dataProcessingService;
 
     @PostMapping("/result")
     public ResponseEntity<Void> receiveAiResult(@RequestBody AiResponseDto dto) {
         schedulingService.saveAiResult(dto);
+        dataProcessingService.broadcastScheduleUpdate(
+            dto.getRequestId(),
+            LocalDate.now().plusDays(1).toString()
+        );
         return ResponseEntity.ok().build();
     }
 
