@@ -1,32 +1,26 @@
 package com.capstone.capstone.mqtt;
 
-import com.capstone.capstone.service.AiService;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.capstone.capstone.service.DemoScheduleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
-
+/**
+ * 데모 전용 MQTT 구독자.
+ * simulate/telemetry 토픽으로 수신된 완성된 AI 요청을 DemoScheduleService로 위임한다.
+ * DB 저장 없음 — 일반 모드(MqttSubscriber + DataProcessingService)와 완전히 분리된 경로.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class MqttSimulateTelemetrySubscriber {
 
-    private final AiService aiService;
-    private final ObjectMapper objectMapper;
+    private final DemoScheduleService demoScheduleService;
 
     @ServiceActivator(inputChannel = "mqttSimulateTelemetryChannel")
     public void handleMessage(String payload) {
-        log.info("[simulate/telemetry 수신] payload 길이={}", payload.length());
-        try {
-            Map<String, Object> request = objectMapper.readValue(payload, new TypeReference<>() {});
-            aiService.sendRaw(request);
-            log.info("[simulate/telemetry] AI 서버 전송 완료");
-        } catch (Exception e) {
-            log.error("[simulate/telemetry] AI 요청 실패: {}", e.getMessage());
-        }
+        log.info("[DEMO MQTT] simulate/telemetry 수신 payload={}자", payload.length());
+        demoScheduleService.handleSimulateTelemetry(payload);
     }
 }

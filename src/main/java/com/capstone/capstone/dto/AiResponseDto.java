@@ -22,7 +22,7 @@ public class AiResponseDto {
     @Getter @Setter
     public static class Status {
         @JsonProperty("is_success")
-        private boolean isSuccess;
+        private boolean success;  // Lombok: isSuccess()
 
         @JsonProperty("error_code")
         private int errorCode;
