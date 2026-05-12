@@ -1,6 +1,7 @@
 package com.capstone.capstone.controller;
 
 import com.capstone.capstone.dto.AiResponseDto;
+import com.capstone.capstone.dto.ScheduleResponseDto;
 import com.capstone.capstone.service.AiService;
 import com.capstone.capstone.service.DataProcessingService;
 import com.capstone.capstone.service.SchedulingService;
@@ -23,9 +24,11 @@ public class AiController {
     @PostMapping("/result")
     public ResponseEntity<Void> receiveAiResult(@RequestBody AiResponseDto dto) {
         schedulingService.saveAiResult(dto);
+        ScheduleResponseDto schedule = schedulingService.convertToScheduleResponse(dto);
         dataProcessingService.broadcastScheduleUpdate(
             dto.getRequestId(),
-            LocalDate.now().plusDays(1).toString()
+            LocalDate.now().plusDays(1).toString(),
+            schedule
         );
         return ResponseEntity.ok().build();
     }

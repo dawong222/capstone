@@ -1,5 +1,6 @@
 package com.capstone.capstone.service;
 
+import com.capstone.capstone.dto.ScheduleResponseDto;
 import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
 import com.capstone.capstone.dto.mqtt.MqttStationDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -92,13 +93,16 @@ public class DataProcessingService {
         }
     }
 
-    public void broadcastScheduleUpdate(String requestId, String targetDate) {
+    public void broadcastScheduleUpdate(String requestId, String targetDate, ScheduleResponseDto schedule) {
         try {
-            String json = objectMapper.writeValueAsString(Map.of(
-                "requestId", requestId != null ? requestId : "",
-                "targetDate", targetDate != null ? targetDate : "",
-                "timestamp", LocalDateTime.now().toString()
-            ));
+            java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("requestId", requestId != null ? requestId : "");
+            payload.put("targetDate", targetDate != null ? targetDate : "");
+            payload.put("timestamp", LocalDateTime.now().toString());
+            if (schedule != null) {
+                payload.put("schedule", schedule);
+            }
+            String json = objectMapper.writeValueAsString(payload);
             for (SseEmitter emitter : new ArrayList<>(emitters)) {
                 try {
                     emitter.send(SseEmitter.event().name("schedule").data(json));
