@@ -1,6 +1,7 @@
 package com.capstone.capstone.mqtt;
 
 import com.capstone.capstone.service.AiService;
+import com.capstone.capstone.service.DataProcessingService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ import java.util.Map;
 public class MqttSimulateTelemetrySubscriber {
 
     private final AiService aiService;
+    private final DataProcessingService dataProcessingService;
     private final ObjectMapper objectMapper;
 
     @ServiceActivator(inputChannel = "mqttSimulateTelemetryChannel")
@@ -27,6 +29,13 @@ public class MqttSimulateTelemetrySubscriber {
             log.info("[simulate/telemetry] AI 서버 전송 완료");
         } catch (Exception e) {
             log.error("[simulate/telemetry] AI 요청 실패: {}", e.getMessage());
+        }
+
+        // SSE로 프론트엔드에 실시간 텔레메트리 전달
+        try {
+            dataProcessingService.process(payload);
+        } catch (Exception e) {
+            log.warn("[simulate/telemetry] SSE 릴레이 실패 (무시): {}", e.getMessage());
         }
     }
 }

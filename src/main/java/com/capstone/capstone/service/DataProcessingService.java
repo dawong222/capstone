@@ -10,7 +10,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -86,6 +89,26 @@ public class DataProcessingService {
             emitter.send(SseEmitter.event().name("telemetry").data(json));
         } catch (IOException e) {
             emitters.remove(emitter);
+        }
+    }
+
+    public void broadcastScheduleUpdate(String requestId, String targetDate) {
+        try {
+            String json = objectMapper.writeValueAsString(Map.of(
+                "requestId", requestId != null ? requestId : "",
+                "targetDate", targetDate != null ? targetDate : "",
+                "timestamp", LocalDateTime.now().toString()
+            ));
+            for (SseEmitter emitter : new ArrayList<>(emitters)) {
+                try {
+                    emitter.send(SseEmitter.event().name("schedule").data(json));
+                } catch (IOException e) {
+                    emitters.remove(emitter);
+                }
+            }
+            log.info("[SSE 스케줄 이벤트] requestId={}, 구독자={}", requestId, emitters.size());
+        } catch (JsonProcessingException e) {
+            log.error("[SSE 스케줄 브로드캐스트 실패] error={}", e.getMessage());
         }
     }
 }
