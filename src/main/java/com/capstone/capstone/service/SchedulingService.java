@@ -38,10 +38,10 @@ public class SchedulingService {
     }
 
     public ScheduleResponseDto convertToScheduleResponse(AiResponseDto dto) {
-        Map<Integer, String> indexToName;
+        Map<Integer, String> nameMap;
         try {
             List<ChargingStation> allStations = chargingStationRepository.findAll();
-            indexToName = allStations.stream()
+            nameMap = allStations.stream()
                 .filter(s -> s.getStationIndex() != null)
                 .collect(Collectors.toMap(
                     ChargingStation::getStationIndex,
@@ -49,8 +49,9 @@ public class SchedulingService {
                 ));
         } catch (Exception e) {
             log.warn("[스케줄 변환] 충전소 정보 DB 조회 실패, 기본 이름 사용: {}", e.getMessage());
-            indexToName = Map.of();
+            nameMap = Map.of();
         }
+        final Map<Integer, String> indexToName = nameMap;
 
         ScheduleResponseDto response = new ScheduleResponseDto();
         response.setRequestId(dto.getRequestId());
