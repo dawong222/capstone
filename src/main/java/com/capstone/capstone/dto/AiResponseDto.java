@@ -29,4 +29,27 @@ public class AiResponseDto {
 
         private String message;
     }
+
+    @Getter @Setter
+    public static class Metrics {
+        @JsonProperty("grid_only_cost_krw")
+        private Double gridOnlyCostKrw;
+
+        @JsonProperty("sac_cost_with_transfer_krw")
+        private Double sacCostWithTransferKrw;
+
+        @JsonProperty("cost_reduction_krw")
+        private Double costReductionKrw;
+
+        @JsonProperty("cost_reduction_pct")
+        private Double costReductionPct;
+
+        @JsonProperty("total_demand_kwh")
+        private Double totalDemandKwh;
+
+        @JsonProperty("total_grid_usage_kwh")
+        private Double totalGridUsageKwh;
+    }
+
+    private Metrics metrics;
 }

@@ -30,6 +30,12 @@ public class ScheduleJob {
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
 
+    private Double costReductionKrw;
+
+    private Double costReductionPct;
+
+    private Double gridOnlyCostKrw;
+
     @OneToMany(mappedBy = "scheduleJob", cascade = CascadeType.ALL)
     private List<ScheduleResult> results;
 

@@ -32,6 +32,13 @@ public class ScheduleResultService {
         job.setCreatedAt(LocalDateTime.now());
         job.setStatus(dto.getStatus() != null ? dto.getStatus().getMessage() : "SUCCESS");
         job.setScheduleTargetDate(LocalDate.now().plusDays(1));
+
+        if (dto.getMetrics() != null) {
+            job.setCostReductionKrw(dto.getMetrics().getCostReductionKrw());
+            job.setCostReductionPct(dto.getMetrics().getCostReductionPct());
+            job.setGridOnlyCostKrw(dto.getMetrics().getGridOnlyCostKrw());
+        }
+
         scheduleJobRepository.save(job);
 
         // AI 응답의 station_id는 0-based 인덱스 → stationIndex로 조회
@@ -176,6 +183,9 @@ public class ScheduleResultService {
         dto.setTargetDate(job.getScheduleTargetDate().toString());
         dto.setCreatedAt(job.getCreatedAt().toString());
         dto.setStatus(job.getStatus());
+        dto.setCostReductionKrw(job.getCostReductionKrw());
+        dto.setCostReductionPct(job.getCostReductionPct());
+        dto.setGridOnlyCostKrw(job.getGridOnlyCostKrw());
         return dto;
     }
 }

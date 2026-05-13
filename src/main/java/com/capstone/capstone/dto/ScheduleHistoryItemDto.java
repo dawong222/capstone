@@ -10,4 +10,7 @@ public class ScheduleHistoryItemDto {
     private String targetDate;
     private String createdAt;
     private String status;
+    private Double costReductionKrw;
+    private Double costReductionPct;
+    private Double gridOnlyCostKrw;
 }
