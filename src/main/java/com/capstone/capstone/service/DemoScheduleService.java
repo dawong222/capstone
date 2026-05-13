@@ -1,6 +1,7 @@
 package com.capstone.capstone.service;
 
 import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,9 +13,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 데모 전용 스케줄링 서비스.
  *
- * simulate/telemetry 토픽으로 수신된 텔레메트리 데이터(day_idx 포함)를 파싱하여
- * day_idx 변화가 감지될 때마다 AI 서버에 스케줄 요청을 전송한다.
- * DB 저장 없음 — 일반 모드(MqttSubscriber + DataProcessingService)와 완전히 분리된 경로.
+ * simulate/telemetry 토픽은 두 가지 페이로드 형식을 수신한다:
+ *   1) 완성된 AI 요청 형식 (request_id 포함) → AI 서버에 그대로 전달
+ *   2) 텔레메트리 형식 (stations + day_idx 포함) → day_idx 변화 감지 후 AI 트리거
+ * DB 저장 없음 — 일반 모드와 완전히 분리된 경로.
  */
 @Slf4j
 @Service
@@ -28,34 +30,43 @@ public class DemoScheduleService {
 
     private final AtomicInteger lastDayIdx = new AtomicInteger(-1);
 
-    /**
-     * simulate/telemetry 수신 시 호출.
-     * 텔레메트리 데이터를 파싱해 live 뷰를 갱신하고,
-     * day_idx가 바뀌면 새 스케줄을 AI 서버에 요청한다.
-     */
     public void handleSimulateTelemetry(String rawPayload) {
         try {
-            MqttPayloadDto data = objectMapper.readValue(rawPayload, MqttPayloadDto.class);
+            Map<String, Object> parsed = objectMapper.readValue(rawPayload, new TypeReference<>() {});
 
-            if (data.getStations() == null || data.getStations().isEmpty()) {
-                log.warn("[DEMO] stations 없음 - 스킵");
-                return;
-            }
+            if (parsed.containsKey("request_id")) {
+                // ── 형식 1: 완성된 AI 요청 → 그대로 AI 서버에 전달 (기존 동작 유지)
+                String requestId = String.valueOf(parsed.get("request_id"));
+                log.info("[DEMO] AI 요청 형식 수신 → AI 서버 전송 request_id={}", requestId);
+                aiService.sendRaw(parsed);
+                log.info("[DEMO] AI 서버 전송 완료 request_id={}", requestId);
 
-            // live 텔레메트리 갱신 (SSE broadcast, DB 저장 없음)
-            dataProcessingService.updateLiveData(data);
+            } else if (parsed.containsKey("stations")) {
+                // ── 형식 2: 텔레메트리 형식 → day_idx 변화 감지 후 AI 트리거
+                MqttPayloadDto data = objectMapper.convertValue(parsed, MqttPayloadDto.class);
 
-            int currentDayIdx = data.getStations().get(0).getHeader().getDayIdx();
-            int prevDayIdx = lastDayIdx.getAndSet(currentDayIdx);
+                if (data.getStations() == null || data.getStations().isEmpty()) {
+                    log.warn("[DEMO] stations 비어 있음 - 스킵");
+                    return;
+                }
 
-            if (prevDayIdx == -1) {
-                log.info("[DEMO] 첫 수신 day_idx={}", currentDayIdx);
-                return;
-            }
+                dataProcessingService.updateLiveData(data);
 
-            if (currentDayIdx != prevDayIdx) {
-                log.info("[DEMO] 시뮬레이션 날짜 변경 감지: day_idx {} → {} → AI 요청 전송", prevDayIdx, currentDayIdx);
-                triggerAiSchedule();
+                int currentDayIdx = data.getStations().get(0).getHeader().getDayIdx();
+                int prevDayIdx = lastDayIdx.getAndSet(currentDayIdx);
+
+                if (prevDayIdx == -1) {
+                    log.info("[DEMO] 첫 수신 day_idx={}", currentDayIdx);
+                    return;
+                }
+
+                if (currentDayIdx != prevDayIdx) {
+                    log.info("[DEMO] 날짜 변경 감지: day_idx {} → {} → AI 요청 전송", prevDayIdx, currentDayIdx);
+                    triggerAiSchedule();
+                }
+
+            } else {
+                log.warn("[DEMO] 알 수 없는 페이로드 형식 - 스킵 (keys={})", parsed.keySet());
             }
 
         } catch (Exception e) {
