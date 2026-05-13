@@ -65,6 +65,12 @@ public class DataProcessingService {
         return latestData.get();
     }
 
+    // DB 저장 없이 최신 데이터만 갱신하고 SSE 브로드캐스트 (데모 전용)
+    public void updateLiveData(MqttPayloadDto data) {
+        latestData.set(data);
+        broadcast(data);
+    }
+
     public void addEmitter(SseEmitter emitter) {
         emitters.add(emitter);
         emitter.onCompletion(() -> emitters.remove(emitter));
