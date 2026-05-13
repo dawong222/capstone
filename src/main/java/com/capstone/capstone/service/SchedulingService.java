@@ -4,6 +4,7 @@ import com.capstone.capstone.dto.*;
 import com.capstone.capstone.entity.ChargingStation;
 import com.capstone.capstone.repository.ChargingStationRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -13,6 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SchedulingService {
@@ -27,17 +29,28 @@ public class SchedulingService {
     }
 
     public void saveAiResult(AiResponseDto dto) {
+        try {
+            scheduleResultService.saveAiResult(dto);
+        } catch (Exception e) {
+            log.warn("[스케줄 DB 저장 실패 - 건너뜀] {}", e.getMessage());
+        }
         scheduleMqttPublisherService.publishSchedule(dto);
     }
 
     public ScheduleResponseDto convertToScheduleResponse(AiResponseDto dto) {
-        List<ChargingStation> allStations = chargingStationRepository.findAll();
-        Map<Integer, String> indexToName = allStations.stream()
-            .filter(s -> s.getStationIndex() != null)
-            .collect(Collectors.toMap(
-                ChargingStation::getStationIndex,
-                s -> s.getName() != null ? s.getName() : "충전소 " + s.getStationIndex()
-            ));
+        Map<Integer, String> indexToName;
+        try {
+            List<ChargingStation> allStations = chargingStationRepository.findAll();
+            indexToName = allStations.stream()
+                .filter(s -> s.getStationIndex() != null)
+                .collect(Collectors.toMap(
+                    ChargingStation::getStationIndex,
+                    s -> s.getName() != null ? s.getName() : "충전소 " + s.getStationIndex()
+                ));
+        } catch (Exception e) {
+            log.warn("[스케줄 변환] 충전소 정보 DB 조회 실패, 기본 이름 사용: {}", e.getMessage());
+            indexToName = Map.of();
+        }
 
         ScheduleResponseDto response = new ScheduleResponseDto();
         response.setRequestId(dto.getRequestId());

@@ -6,12 +6,14 @@ import com.capstone.capstone.service.AiService;
 import com.capstone.capstone.service.DataProcessingService;
 import com.capstone.capstone.service.SchedulingService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/ai")
 @RequiredArgsConstructor
@@ -23,13 +25,21 @@ public class AiController {
 
     @PostMapping("/result")
     public ResponseEntity<Void> receiveAiResult(@RequestBody AiResponseDto dto) {
+        // MQTT(IoT) 발행 — DB 실패해도 반드시 실행 (saveAiResult 내부에서 try-catch)
         schedulingService.saveAiResult(dto);
-        ScheduleResponseDto schedule = schedulingService.convertToScheduleResponse(dto);
-        dataProcessingService.broadcastScheduleUpdate(
-            dto.getRequestId(),
-            LocalDate.now().plusDays(1).toString(),
-            schedule
-        );
+
+        // SSE(프론트) 브로드캐스트 — MQTT와 독립적으로 항상 시도
+        try {
+            ScheduleResponseDto schedule = schedulingService.convertToScheduleResponse(dto);
+            dataProcessingService.broadcastScheduleUpdate(
+                dto.getRequestId(),
+                LocalDate.now().plusDays(1).toString(),
+                schedule
+            );
+        } catch (Exception e) {
+            log.error("[SSE 브로드캐스트 실패] {}", e.getMessage());
+        }
+
         return ResponseEntity.ok().build();
     }
 
