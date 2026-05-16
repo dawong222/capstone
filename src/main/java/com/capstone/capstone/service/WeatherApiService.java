@@ -137,7 +137,7 @@ public class WeatherApiService {
 
     private String buildAsosUrl(String stnIds, String startDt, String endDt) {
         try {
-            StringBuilder sb = new StringBuilder("http://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
+            StringBuilder sb = new StringBuilder("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
             sb.append("?").append(URLEncoder.encode("serviceKey", "UTF-8")).append("=").append(asosKey);
             sb.append("&").append(URLEncoder.encode("pageNo",    "UTF-8")).append("=").append(URLEncoder.encode("1",    "UTF-8"));
             sb.append("&").append(URLEncoder.encode("numOfRows", "UTF-8")).append("=").append(URLEncoder.encode("500",  "UTF-8"));
