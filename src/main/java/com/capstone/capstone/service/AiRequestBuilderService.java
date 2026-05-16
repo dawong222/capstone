@@ -174,7 +174,7 @@ public class AiRequestBuilderService {
 
         // ── 날씨 데이터 (기상청 API) ───────────────────────────────────
         String asosStart = today.minusDays(7).format(dateFmt);
-        String asosEnd   = today.format(dateFmt);
+        String asosEnd   = today.minusDays(1).format(dateFmt); // ASOS는 전일(D-1)까지만 제공
         List<Map<String, Object>> asosRaw = weatherApiService.fetchRawAsosItems("108", asosStart, asosEnd);
         req.put("demand_past_weather_hourly", weatherApiService.buildAsosWeatherHourly(asosRaw, "ASOS_108", "Seoul/Gangnam",        iso));
         req.put("pv_past_weather_hourly",     weatherApiService.buildAsosWeatherHourly(asosRaw, "ASOS_108", "Seoul/Gangnam", iso));
