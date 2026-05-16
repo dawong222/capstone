@@ -9,10 +9,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -28,9 +24,6 @@ public class WeatherApiService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
-    @Value("${weather.asos.key}")
-    private String asosKey;
-
     @Value("${weather.forecast.key}")
     private String forecastKey;
 
@@ -42,7 +35,11 @@ public class WeatherApiService {
         try {
             String url = buildAsosUrl(stnIds, startDt, endDt);
             log.info("[ASOS raw 요청] url={}", url);
-            String body = httpGet(url);
+            String body = restTemplate.getForObject(url, String.class);
+            if (body == null || body.isBlank()) {
+                log.warn("[ASOS raw 실패] stnIds={} : 빈 응답", stnIds);
+                return new ArrayList<>();
+            }
             log.info("[ASOS raw 응답] body={}", body.length() > 500 ? body.substring(0, 500) : body);
             JsonNode root = objectMapper.readTree(body);
             String rc  = root.path("response").path("header").path("resultCode").asText();
@@ -135,10 +132,11 @@ public class WeatherApiService {
     // ─── private helpers ──────────────────────────────────────────────
 
     private String buildAsosUrl(String stnIds, String startDt, String endDt) {
-        return "https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList"
-                + "?serviceKey=" + asosKey
+        // data.go.kr 서비스 → apihub.kma.go.kr 이전 (동일 authKey 사용)
+        return "https://apihub.kma.go.kr/api/typ02/openApi/AsosHourlyInfoService/getWthrDataList"
+                + "?authKey=" + forecastKey
                 + "&pageNo=1"
-                + "&numOfRows=300"
+                + "&numOfRows=500"
                 + "&dataType=JSON"
                 + "&dataCd=ASOS"
                 + "&dateCd=HR"
@@ -149,21 +147,6 @@ public class WeatherApiService {
                 + "&stnIds=" + stnIds;
     }
 
-    private String httpGet(String urlStr) throws Exception {
-        URL url = new URL(urlStr);
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setRequestMethod("GET");
-        conn.setRequestProperty("Content-type", "application/json");
-        BufferedReader rd = conn.getResponseCode() >= 200 && conn.getResponseCode() <= 300
-                ? new BufferedReader(new InputStreamReader(conn.getInputStream()))
-                : new BufferedReader(new InputStreamReader(conn.getErrorStream()));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = rd.readLine()) != null) sb.append(line);
-        rd.close();
-        conn.disconnect();
-        return sb.toString();
-    }
 
     private String buildVilageFcstUrl(int nx, int ny, String baseDate, String baseTime) {
         return UriComponentsBuilder
@@ -201,7 +184,10 @@ public class WeatherApiService {
             String tmRaw = String.valueOf(r.getOrDefault("tm", ""));
             ZonedDateTime zdt;
             try { zdt = LocalDateTime.parse(tmRaw, asosFmt).atZone(KST); }
-            catch (Exception e) { continue; }
+            catch (Exception e) {
+                log.warn("[ASOS 파싱] tm 형식 불일치 '{}' : {}", tmRaw, e.getMessage());
+                continue;
+            }
             double precipitation = toDouble(r, "rn");
             double snow          = toDouble(r, "dsnw");
             double currentPty   = snow > 0 ? 3.0 : (precipitation > 0 ? 1.0 : 0.0);
