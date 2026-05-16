@@ -9,6 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -24,6 +29,9 @@ public class WeatherApiService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
+    @Value("${weather.asos.key}")
+    private String asosKey;
+
     @Value("${weather.forecast.key}")
     private String forecastKey;
 
@@ -35,11 +43,7 @@ public class WeatherApiService {
         try {
             String url = buildAsosUrl(stnIds, startDt, endDt);
             log.info("[ASOS raw 요청] url={}", url);
-            String body = restTemplate.getForObject(url, String.class);
-            if (body == null || body.isBlank()) {
-                log.warn("[ASOS raw 실패] stnIds={} : 빈 응답", stnIds);
-                return new ArrayList<>();
-            }
+            String body = httpGet(url);
             log.info("[ASOS raw 응답] body={}", body.length() > 500 ? body.substring(0, 500) : body);
             JsonNode root = objectMapper.readTree(body);
             String rc  = root.path("response").path("header").path("resultCode").asText();
@@ -132,19 +136,39 @@ public class WeatherApiService {
     // ─── private helpers ──────────────────────────────────────────────
 
     private String buildAsosUrl(String stnIds, String startDt, String endDt) {
-        // data.go.kr 서비스 → apihub.kma.go.kr 이전 (동일 authKey 사용)
-        return "https://apihub.kma.go.kr/api/typ02/openApi/AsosHourlyInfoService/getWthrDataList"
-                + "?authKey=" + forecastKey
-                + "&pageNo=1"
-                + "&numOfRows=500"
-                + "&dataType=JSON"
-                + "&dataCd=ASOS"
-                + "&dateCd=HR"
-                + "&startDt=" + startDt
-                + "&startHh=00"
-                + "&endDt=" + endDt
-                + "&endHh=23"
-                + "&stnIds=" + stnIds;
+        try {
+            StringBuilder sb = new StringBuilder("http://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
+            sb.append("?").append(URLEncoder.encode("serviceKey", "UTF-8")).append("=").append(asosKey);
+            sb.append("&").append(URLEncoder.encode("pageNo",    "UTF-8")).append("=").append(URLEncoder.encode("1",    "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("numOfRows", "UTF-8")).append("=").append(URLEncoder.encode("500",  "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("dataType",  "UTF-8")).append("=").append(URLEncoder.encode("JSON", "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("dataCd",    "UTF-8")).append("=").append(URLEncoder.encode("ASOS", "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("dateCd",    "UTF-8")).append("=").append(URLEncoder.encode("HR",   "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("startDt",   "UTF-8")).append("=").append(URLEncoder.encode(startDt, "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("startHh",   "UTF-8")).append("=").append(URLEncoder.encode("00",  "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("endDt",     "UTF-8")).append("=").append(URLEncoder.encode(endDt,   "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("endHh",     "UTF-8")).append("=").append(URLEncoder.encode("23",  "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("stnIds",    "UTF-8")).append("=").append(URLEncoder.encode(stnIds,  "UTF-8"));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("ASOS URL 빌드 실패", e);
+        }
+    }
+
+    private String httpGet(String urlStr) throws Exception {
+        URL url = new URL(urlStr);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("Content-type", "application/json");
+        BufferedReader rd = conn.getResponseCode() >= 200 && conn.getResponseCode() <= 300
+                ? new BufferedReader(new InputStreamReader(conn.getInputStream()))
+                : new BufferedReader(new InputStreamReader(conn.getErrorStream()));
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = rd.readLine()) != null) sb.append(line);
+        rd.close();
+        conn.disconnect();
+        return sb.toString();
     }
 
 
