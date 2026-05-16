@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -75,8 +76,13 @@ public class WeatherApiService {
                     allItems.add(objectMapper.convertValue(n, Map.class));
                 }
                 pageNo++;
+            } catch (HttpStatusCodeException e) {
+                log.warn("[ASOS raw HTTP오류] stnIds={} pageNo={} status={} body={}",
+                        stnIds, pageNo, e.getStatusCode(), e.getResponseBodyAsString());
+                break;
             } catch (Exception e) {
-                log.warn("[ASOS raw 실패] stnIds={} pageNo={} : {}", stnIds, pageNo, e.getMessage());
+                log.warn("[ASOS raw 실패] stnIds={} pageNo={} : {} ({})",
+                        stnIds, pageNo, e.getMessage(), e.getClass().getSimpleName());
                 break;
             }
         } while (totalCount > 0 && allItems.size() < totalCount);
