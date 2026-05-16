@@ -195,45 +195,66 @@ public class WeatherApiService {
     public List<Map<String, Object>> buildAsosWeatherHourly(
             List<Map<String, Object>> asosRaw, String source, String locationName, DateTimeFormatter iso) {
         DateTimeFormatter asosFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        DateTimeFormatter tmFmt   = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
         List<Map<String, Object>> list = new ArrayList<>();
         for (Map<String, Object> r : asosRaw) {
             String tmRaw = String.valueOf(r.getOrDefault("tm", ""));
-            String ts;
-            try { ts = LocalDateTime.parse(tmRaw, asosFmt).atZone(KST).format(iso); }
-            catch (Exception e) { ts = tmRaw; }
+            ZonedDateTime zdt;
+            try { zdt = LocalDateTime.parse(tmRaw, asosFmt).atZone(KST); }
+            catch (Exception e) { continue; }
+            double precipitation = toDouble(r, "rn");
+            double snow          = toDouble(r, "dsnw");
+            double currentPty   = snow > 0 ? 3.0 : (precipitation > 0 ? 1.0 : 0.0);
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("timestamp", ts); row.put("tm", ts); row.put("source", source); row.put("location_name", locationName);
-            row.put("ta", toDouble(r,"ta")); row.put("temperature_c", toDouble(r,"ta"));
-            row.put("rn", toDouble(r,"rn")); row.put("precipitation_mm", toDouble(r,"rn"));
-            row.put("ws", toDouble(r,"ws")); row.put("wind_speed_ms", toDouble(r,"ws"));
-            row.put("wd", toDouble(r,"wd")); row.put("wind_direction_deg", toDouble(r,"wd"));
-            row.put("hm", toDouble(r,"hm")); row.put("humidity_pct", toDouble(r,"hm"));
-            row.put("pa", toDouble(r,"pa")); row.put("pressure_hpa", toDouble(r,"pa"));
-            row.put("ps", toDouble(r,"ps")); row.put("sea_level_pressure_hpa", toDouble(r,"ps"));
-            row.put("ss", toDouble(r,"ss")); row.put("sunshine_hours", toDouble(r,"ss"));
-            row.put("icsr", toDouble(r,"icsr")); row.put("solar_radiation_mj_m2", toDouble(r,"icsr"));
-            row.put("dsnw", toDouble(r,"dsnw")); row.put("snow_cm", toDouble(r,"dsnw"));
-            row.put("hr3Fhsc", toDouble(r,"hr3Fhsc")); row.put("new_snow_3h_cm", toDouble(r,"hr3Fhsc"));
-            row.put("dc10Tca", toDouble(r,"dc10Tca")); row.put("cloud_amount", toDouble(r,"dc10Tca"));
+            row.put("timestamp",              zdt.format(iso));
+            row.put("tm",                    zdt.format(tmFmt));
+            row.put("source",                source);
+            row.put("location_name",         locationName);
+            row.put("temperature_c",         toDouble(r, "ta"));
+            row.put("humidity_pct",          toDouble(r, "hm"));
+            row.put("cloud_amount",          toDouble(r, "dc10Tca"));
+            row.put("precipitation_mm",      precipitation);
+            row.put("snow_cm",               snow);
+            row.put("wind_speed_ms",         toDouble(r, "ws"));
+            row.put("wind_direction_deg",    toDouble(r, "wd"));
+            row.put("current_PTY",           currentPty);
+            row.put("pressure_hpa",          toDouble(r, "pa"));
+            row.put("sea_level_pressure_hpa", toDouble(r, "ps"));
+            row.put("solar_radiation_mj_m2", toDouble(r, "icsr"));
             list.add(row);
         }
         return list;
     }
 
-    public List<Map<String, Object>> buildForecastWeatherHourly(
-            List<Map<String, Object>> forecastRaw, String forecastLocation) {
+    public List<Map<String, Object>> buildWeatherForecastHourly(List<Map<String, Object>> forecastRaw) {
+        DateTimeFormatter tmFmt  = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
+        DateTimeFormatter isoFmt = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
         List<Map<String, Object>> list = new ArrayList<>();
         for (Map<String, Object> r : forecastRaw) {
-            String ts = String.valueOf(r.getOrDefault("tm", ""));
+            String isoTs = String.valueOf(r.getOrDefault("tm", ""));
+            String tmStr;
+            try {
+                tmStr = ZonedDateTime.parse(isoTs, isoFmt).format(tmFmt);
+            } catch (Exception e) {
+                tmStr = isoTs;
+            }
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("timestamp", ts); row.put("tmef", ts); row.put("forecast_location", forecastLocation);
-            row.put("TMP", toDouble(r,"tmp")); row.put("POP", toDouble(r,"pop"));
-            row.put("PTY", toDouble(r,"pty").intValue()); row.put("PCP", toDouble(r,"pcp"));
-            row.put("SNO", toDouble(r,"sno")); row.put("REH", toDouble(r,"reh"));
-            row.put("SKY", toDouble(r,"sky").intValue()); row.put("WSD", toDouble(r,"wsd"));
-            row.put("VEC", toDouble(r,"vec")); row.put("UUU", toDouble(r,"uuu"));
-            row.put("VVV", toDouble(r,"vvv")); row.put("TMN", toDouble(r,"tmn"));
-            row.put("TMX", toDouble(r,"tmx")); row.put("LGT", toDouble(r,"lgt").intValue());
+            row.put("timestamp",           isoTs);
+            row.put("tm",                 tmStr);
+            row.put("source",             "KMA_SHORT_TERM");
+            row.put("temperature_c",      toDouble(r, "tmp"));
+            row.put("pop_pct",            toDouble(r, "pop"));
+            row.put("cloud_amount",       toDouble(r, "sky"));
+            row.put("pty",               toDouble(r, "pty").intValue());
+            row.put("precipitation_mm",  toDouble(r, "pcp"));
+            row.put("snow_cm",           toDouble(r, "sno"));
+            row.put("humidity_pct",      toDouble(r, "reh"));
+            row.put("wind_speed_ms",     toDouble(r, "wsd"));
+            row.put("wind_direction_deg", toDouble(r, "vec"));
+            row.put("uuu",               toDouble(r, "uuu"));
+            row.put("vvv",               toDouble(r, "vvv"));
+            row.put("tmn",               toDouble(r, "tmn"));
+            row.put("tmx",               toDouble(r, "tmx"));
             list.add(row);
         }
         return list;

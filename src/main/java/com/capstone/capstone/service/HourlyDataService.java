@@ -97,8 +97,8 @@ public class HourlyDataService {
 
     private void triggerAi() {
         try {
-            AiRequestDto request = aiRequestBuilderService.buildAiRequest();
-            aiService.requestSchedule(request);
+            Map<String, Object> payload = aiRequestBuilderService.buildRawAiRequest();
+            aiService.sendRaw(payload);
             log.info("[AI 전송 완료] AI 서버 콜백 대기 중");
         } catch (Exception e) {
             log.error("[AI 전송 실패] {}", e.getMessage());
