@@ -15,7 +15,12 @@ public class Transfer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Double power;   // kW
+    private Double transferPowerKw;
+    private Double receivedPowerKw;
+    private Double lossPowerKw;
+    private Double transferEnergyKwh;
+    private Double receivedEnergyKwh;
+    private Double lossEnergyKwh;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "hourly_plan_id")

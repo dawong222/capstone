@@ -25,6 +25,8 @@ public class ScheduleResult {
     @JoinColumn(name = "station_id")
     private ChargingStation station;
 
+    private String stationName;
+
     @OneToMany(mappedBy = "scheduleResult", cascade = CascadeType.ALL)
     private List<HourlyPlan> hourlyPlans;
 }

@@ -38,15 +38,15 @@ public class ScheduleMqttPublisherService {
                 Map<String, Object> slot = new LinkedHashMap<>();
                 slot.put("hour", plan.getHour());
                 slot.put("ess_mode", plan.getEssMode());
-                slot.put("ess_power_kw", plan.getEssPower());
-                slot.put("grid_usage_kw", plan.getGridUsage());
+                slot.put("ess_power_kw", plan.getEssPowerKw());
+                slot.put("grid_usage_kw", plan.getGridUsageKw());
 
                 List<Map<String, Object>> transfers = new ArrayList<>();
                 if (plan.getTransfer() != null) {
                     for (TransferDto t : plan.getTransfer()) {
                         Map<String, Object> tr = new LinkedHashMap<>();
                         tr.put("target_station_id", t.getTargetStationId());
-                        tr.put("transfer_power_kw", t.getPower());
+                        tr.put("transfer_power_kw", t.getTransferPowerKw());
                         transfers.add(tr);
                     }
                 }

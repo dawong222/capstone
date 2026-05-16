@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpClientErrorException;
 
 import java.time.LocalDate;
 import java.util.Map;
@@ -69,8 +70,12 @@ public class AiController {
 
     /** 샘플/커스텀 payload를 AI 서버에 직접 전송, 결과는 콜백(/ai/result)으로 수신 */
     @PostMapping("/v2/send-sample")
-    public ResponseEntity<Void> sendSampleToAi(@RequestBody Map<String, Object> payload) {
-        aiService.sendRaw(payload);
-        return ResponseEntity.accepted().build();
+    public ResponseEntity<String> sendSampleToAi(@RequestBody Map<String, Object> payload) {
+        try {
+            aiService.sendRaw(payload);
+            return ResponseEntity.accepted().build();
+        } catch (HttpClientErrorException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(e.getResponseBodyAsString());
+        }
     }
 }

@@ -13,6 +13,9 @@ public class StationScheduleDto {
     @JsonProperty("station_id")
     private Long stationId;
 
+    @JsonProperty("station_name")
+    private String stationName;
+
     @JsonProperty("hourly_plan")
     private List<HourlyPlanDto> hourlyPlan;
 }

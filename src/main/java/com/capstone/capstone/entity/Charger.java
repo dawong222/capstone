@@ -18,6 +18,9 @@ public class Charger {
     @Column(name = "charger_index", nullable = false)
     private Integer chargerIndex;   // MQTT chargerId (0-based, 스테이션 내 인덱스)
 
+    private String chargerType;     // "fast" / "slow"
+    private Double ratedPowerKw;    // 정격 출력 (kW)
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_id")
     private ChargingStation station;

@@ -27,7 +27,12 @@
       "Bash(git rm *)",
       "Bash(del \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\\\\src\\\\main\\\\java\\\\com\\\\capstone\\\\capstone\\\\entity\\\\DemandHistory.java\")",
       "Bash(del \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\\\\src\\\\main\\\\java\\\\com\\\\capstone\\\\capstone\\\\repository\\\\DemandHistoryRepository.java\")",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(python *)",
+      "Bash(git revert *)",
+      "Bash(git merge *)",
+      "Bash(python3 *)"
     ]
   }
 }

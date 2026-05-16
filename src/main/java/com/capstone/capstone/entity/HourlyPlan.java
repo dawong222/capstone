@@ -19,9 +19,15 @@ public class HourlyPlan {
 
     private Integer hour;
     private String essMode;
-    private Double essPower;
-    private Double gridUsage;
+    private Double essPowerKw;
+    private Double essPowerSignedKw;
+    private Double essEnergyKwh;
+    private Double gridUsageKw;
+    private Double gridUsageKwh;
+    private Double pvGenerationPredKwh;
+    private Double loadPredKwh;
     private Double pvPriority;
+    private Double expectedSoc;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "schedule_result_id")

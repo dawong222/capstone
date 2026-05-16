@@ -7,6 +7,7 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 @Entity
@@ -23,6 +24,13 @@ public class ScheduleJob {
     private String requestId;
 
     private LocalDate scheduleTargetDate;
+    private String scheduleMode;
+    private String modelAlgorithm;
+    private String modelVersion;
+
+    @Column(columnDefinition = "TIMESTAMPTZ")
+    private OffsetDateTime responseAt;
+
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
     private String status;

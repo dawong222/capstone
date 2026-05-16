@@ -1,6 +1,6 @@
 package com.capstone.capstone.dto;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,17 +12,44 @@ public class HourlyPlanDto {
 
     private int hour;
 
-    @JsonAlias("ess_mode")
+    @JsonProperty("slot_label")
+    private String slotLabel;
+
+    @JsonProperty("slot_start")
+    private String slotStart;
+
+    @JsonProperty("slot_end")
+    private String slotEnd;
+
+    @JsonProperty("ess_mode")
     private String essMode;
 
-    @JsonAlias({"ess_power", "ess_power_kw"})
-    private double essPower;
+    @JsonProperty("ess_power_kw")
+    private Double essPowerKw;
 
-    @JsonAlias({"grid_usage", "grid_usage_kw"})
-    private double gridUsage;
+    @JsonProperty("ess_power_signed_kw")
+    private Double essPowerSignedKw;
 
-    @JsonAlias({"pv_priority", "pv_priority_kw"})
-    private double pvPriority;
+    @JsonProperty("ess_energy_kwh")
+    private Double essEnergyKwh;
+
+    @JsonProperty("grid_usage_kw")
+    private Double gridUsageKw;
+
+    @JsonProperty("grid_usage_kwh")
+    private Double gridUsageKwh;
+
+    @JsonProperty("pv_generation_pred_kwh")
+    private Double pvGenerationPredKwh;
+
+    @JsonProperty("load_pred_kwh")
+    private Double loadPredKwh;
+
+    @JsonProperty("pv_priority")
+    private Double pvPriority;
+
+    @JsonProperty("expected_soc")
+    private Double expectedSoc;
 
     private List<TransferDto> transfer;
 }
