@@ -40,35 +40,55 @@ public class WeatherApiService {
     // ─── ASOS 과거 관측 ───────────────────────────────────────────────
 
     public List<Map<String, Object>> fetchRawAsosItems(String stnIds, String startDt, String endDt) {
-        try {
-            String url = buildAsosUrl(stnIds, startDt, endDt);
-            log.info("[ASOS raw 요청] url={}", url);
-            String body = httpGet(url);
-            log.info("[ASOS raw 응답] body={}", body.length() > 500 ? body.substring(0, 500) : body);
-            JsonNode root = objectMapper.readTree(body);
-            String rc  = root.path("response").path("header").path("resultCode").asText();
-            String msg = root.path("response").path("header").path("resultMsg").asText();
-            if (!"00".equals(rc)) {
-                log.warn("[ASOS raw 실패] stnIds={} resultCode={} msg={}", stnIds, rc, msg);
-                return new ArrayList<>();
+        final int NUM_OF_ROWS = 999;
+        List<Map<String, Object>> allItems = new ArrayList<>();
+        int pageNo = 1;
+        int totalCount = 0;
+
+        do {
+            try {
+                String url = buildAsosUrl(stnIds, startDt, endDt, pageNo, NUM_OF_ROWS);
+                log.info("[ASOS raw 요청] pageNo={} url={}", pageNo, url);
+
+                String body = restTemplate.getForObject(java.net.URI.create(url), String.class);
+                if (body == null || body.isBlank()) {
+                    log.warn("[ASOS raw] 빈 응답 pageNo={}", pageNo);
+                    break;
+                }
+                log.info("[ASOS raw 응답 p{}] {}", pageNo, body.length() > 400 ? body.substring(0, 400) : body);
+
+                JsonNode root = objectMapper.readTree(body);
+                String rc  = root.path("response").path("header").path("resultCode").asText();
+                String msg = root.path("response").path("header").path("resultMsg").asText();
+                if (!"00".equals(rc)) {
+                    log.warn("[ASOS raw 실패] stnIds={} resultCode={} msg={}", stnIds, rc, msg);
+                    break;
+                }
+
+                if (pageNo == 1) {
+                    totalCount = root.path("response").path("body").path("totalCount").asInt(0);
+                    log.info("[ASOS raw] totalCount={}", totalCount);
+                }
+
+                JsonNode items = root.path("response").path("body").path("items").path("item");
+                for (JsonNode n : items) {
+                    allItems.add(objectMapper.convertValue(n, Map.class));
+                }
+                pageNo++;
+            } catch (Exception e) {
+                log.warn("[ASOS raw 실패] stnIds={} pageNo={} : {}", stnIds, pageNo, e.getMessage());
+                break;
             }
-            JsonNode items = root.path("response").path("body").path("items").path("item");
-            List<Map<String, Object>> result = new ArrayList<>();
-            for (JsonNode n : items) {
-                result.add(objectMapper.convertValue(n, Map.class));
-            }
-            log.info("[ASOS raw] stnIds={} → {}건", stnIds, result.size());
-            return result;
-        } catch (Exception e) {
-            log.warn("[ASOS raw 실패] stnIds={} : {}", stnIds, e.getMessage());
-            return new ArrayList<>();
-        }
+        } while (totalCount > 0 && allItems.size() < totalCount);
+
+        log.info("[ASOS raw] stnIds={} → 총 {}건", stnIds, allItems.size());
+        return allItems;
     }
 
     public List<Map<String, Object>> getHistoryRaw() {
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMdd");
         String startDt = LocalDate.now().minusDays(7).format(fmt);
-        String endDt   = LocalDate.now().format(fmt);
+        String endDt   = LocalDate.now().minusDays(1).format(fmt); // ASOS는 전일(D-1)까지만 제공
         return fetchRawAsosItems("108", startDt, endDt);
     }
 
@@ -135,12 +155,12 @@ public class WeatherApiService {
 
     // ─── private helpers ──────────────────────────────────────────────
 
-    private String buildAsosUrl(String stnIds, String startDt, String endDt) {
+    private String buildAsosUrl(String stnIds, String startDt, String endDt, int pageNo, int numOfRows) {
         try {
             StringBuilder sb = new StringBuilder("https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList");
             sb.append("?").append(URLEncoder.encode("serviceKey", "UTF-8")).append("=").append(asosKey);
-            sb.append("&").append(URLEncoder.encode("pageNo",    "UTF-8")).append("=").append(URLEncoder.encode("1",    "UTF-8"));
-            sb.append("&").append(URLEncoder.encode("numOfRows", "UTF-8")).append("=").append(URLEncoder.encode("500",  "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("pageNo",    "UTF-8")).append("=").append(URLEncoder.encode(String.valueOf(pageNo),    "UTF-8"));
+            sb.append("&").append(URLEncoder.encode("numOfRows", "UTF-8")).append("=").append(URLEncoder.encode(String.valueOf(numOfRows),  "UTF-8"));
             sb.append("&").append(URLEncoder.encode("dataType",  "UTF-8")).append("=").append(URLEncoder.encode("JSON", "UTF-8"));
             sb.append("&").append(URLEncoder.encode("dataCd",    "UTF-8")).append("=").append(URLEncoder.encode("ASOS", "UTF-8"));
             sb.append("&").append(URLEncoder.encode("dateCd",    "UTF-8")).append("=").append(URLEncoder.encode("HR",   "UTF-8"));
