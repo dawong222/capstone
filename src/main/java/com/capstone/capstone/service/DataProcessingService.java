@@ -3,6 +3,7 @@ package com.capstone.capstone.service;
 import com.capstone.capstone.dto.ScheduleResponseDto;
 import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
 import com.capstone.capstone.dto.mqtt.MqttStationDto;
+import com.capstone.capstone.repository.ChargingStationRepository;
 import com.capstone.capstone.repository.HourlySnapshotRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +34,7 @@ public class DataProcessingService {
     private final AiRequestBuilderService aiRequestBuilderService;
     private final AiService aiService;
     private final HourlySnapshotRepository snapshotRepository;
+    private final ChargingStationRepository stationRepository;
 
     // 최신 MQTT 데이터 (스레드 안전)
     private final AtomicReference<MqttPayloadDto> latestData = new AtomicReference<>();
@@ -110,19 +112,19 @@ public class DataProcessingService {
     }
 
     private boolean hasSevenDaysOfSnapshots() {
-        return snapshotRepository.findFirstByOrderByRecordedAtAsc().map(earliest -> {
-            long daysAvailable = ChronoUnit.DAYS.between(
-                    earliest.getRecordedAt().toLocalDate(), LocalDate.now());
-            if (daysAvailable < 7) {
-                log.warn("[22:10 AI 요청 스킵] 7일치 스냅샷 부족 - 현재 {}일치 데이터 보유 (7일치 필요)",
-                        daysAvailable);
-                return false;
-            }
-            return true;
-        }).orElseGet(() -> {
-            log.warn("[22:10 AI 요청 스킵] 스냅샷 데이터 없음 - 시뮬레이션 데이터 축적 필요");
+        long stationCount = stationRepository.count();
+        if (stationCount == 0) {
+            log.warn("[22:10 AI 요청 스킵] 등록된 스테이션 없음");
             return false;
-        });
+        }
+        long minRowsPerDay = stationCount * 24;
+        long completeDays = snapshotRepository.countCompleteDays(minRowsPerDay);
+        if (completeDays < 7) {
+            log.warn("[22:10 AI 요청 스킵] 완전한 7일치 스냅샷 부족 - 현재 {}일치 완료 ({}개 스테이션 × 24시간 기준)",
+                    completeDays, stationCount);
+            return false;
+        }
+        return true;
     }
 
     private void checkAndTriggerAiRequest(MqttPayloadDto data) {
