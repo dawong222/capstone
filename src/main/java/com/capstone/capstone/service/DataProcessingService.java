@@ -11,7 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,9 +28,12 @@ public class DataProcessingService {
 
     private final ObjectMapper objectMapper;
     private final TelemetryPersistenceService persistenceService;
+    private final AiRequestBuilderService aiRequestBuilderService;
+    private final AiService aiService;
 
     // 최신 MQTT 데이터 (스레드 안전)
     private final AtomicReference<MqttPayloadDto> latestData = new AtomicReference<>();
+    private final AtomicReference<LocalDate> lastAiTriggerDate = new AtomicReference<>();
 
     // SSE 구독자 목록 (스레드 안전)
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
@@ -52,6 +58,7 @@ public class DataProcessingService {
             latestData.set(data);
             broadcast(data);
             persistenceService.persist(data);
+            checkAndTriggerAiRequest(data);
 
             return data;
 
@@ -96,6 +103,35 @@ public class DataProcessingService {
             emitter.send(SseEmitter.event().name("telemetry").data(json));
         } catch (IOException e) {
             emitters.remove(emitter);
+        }
+    }
+
+    private void checkAndTriggerAiRequest(MqttPayloadDto data) {
+        if (data.getStations() == null || data.getStations().isEmpty()) return;
+        String timestamp = data.getStations().get(0).getHeader().getTimestamp();
+        if (timestamp == null) return;
+        try {
+            ZonedDateTime kst = ZonedDateTime.parse(timestamp)
+                    .withZoneSameInstant(ZoneId.of("Asia/Seoul"));
+            if (kst.getHour() != 22 || kst.getMinute() != 10) return;
+
+            LocalDate triggerDate = kst.toLocalDate();
+            LocalDate prev = lastAiTriggerDate.get();
+            if (prev != null && prev.equals(triggerDate)) return;
+            if (!lastAiTriggerDate.compareAndSet(prev, triggerDate)) return;
+
+            log.info("[22:10 AI 요청] IoT 타임스탬프 기준 트리거 ({})", timestamp);
+            new Thread(() -> {
+                try {
+                    Map<String, Object> payload = aiRequestBuilderService.buildRawAiRequest();
+                    aiService.sendRaw(payload);
+                    log.info("[22:10 AI 요청 완료]");
+                } catch (Exception e) {
+                    log.error("[22:10 AI 요청 실패] {}", e.getMessage());
+                }
+            }, "ai-request-trigger").start();
+        } catch (Exception e) {
+            log.warn("[22:10 AI 요청] 타임스탬프 파싱 실패: {}", timestamp);
         }
     }
 

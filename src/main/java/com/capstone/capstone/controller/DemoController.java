@@ -4,7 +4,8 @@ import com.capstone.capstone.entity.ChargingStation;
 import com.capstone.capstone.entity.HourlySnapshot;
 import com.capstone.capstone.repository.ChargingStationRepository;
 import com.capstone.capstone.repository.HourlySnapshotRepository;
-import com.capstone.capstone.service.HourlyDataService;
+import com.capstone.capstone.service.AiRequestBuilderService;
+import com.capstone.capstone.service.AiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -29,7 +30,8 @@ public class DemoController {
 
     private final HourlySnapshotRepository snapshotRepository;
     private final ChargingStationRepository stationRepository;
-    private final HourlyDataService hourlyDataService;
+    private final AiRequestBuilderService aiRequestBuilderService;
+    private final AiService aiService;
 
     @PostMapping("/run")
     public ResponseEntity<Map<String, String>> run() {
@@ -44,7 +46,7 @@ public class DemoController {
             }
             CompletableFuture.runAsync(() -> {
                 try {
-                    hourlyDataService.sendDailyAiRequest();
+                    aiService.sendRaw(aiRequestBuilderService.buildRawAiRequest());
                     log.info("[Demo] AI 요청 전송 완료");
                 } catch (Exception e) {
                     log.error("[Demo] AI 요청 전송 실패: {}", e.getMessage(), e);

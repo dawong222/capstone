@@ -76,25 +76,6 @@ public class HourlyDataService {
         }
     }
 
-    @Transactional
-    @Scheduled(cron = "0 10 22 * * *")
-    public void sendDailyAiRequest() {
-        log.info("[22:10 AI 전송] 스케줄 시작");
-
-        // 7일치 초과 스냅샷 삭제
-        LocalDateTime cutoff = LocalDateTime.now().minusDays(7);
-        snapshotRepository.deleteByRecordedAtBefore(cutoff);
-        log.info("[스냅샷 정리] {} 이전 데이터 삭제 완료", cutoff.toLocalDate());
-
-        try {
-            Map<String, Object> payload = aiRequestBuilderService.buildRawAiRequest();
-            aiService.sendRaw(payload);
-            log.info("[22:10 AI 전송 완료] AI 서버 콜백 대기 중");
-        } catch (Exception e) {
-            log.error("[22:10 AI 전송 실패] {}", e.getMessage());
-        }
-    }
-
     private void triggerAi() {
         try {
             Map<String, Object> payload = aiRequestBuilderService.buildRawAiRequest();
