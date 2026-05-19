@@ -230,7 +230,8 @@ public class ScheduleResultService {
 
     private StationScheduleResponseDto toStationScheduleResponseDto(ScheduleResult result) {
         StationScheduleResponseDto dto = new StationScheduleResponseDto();
-        dto.setStationId(result.getStation().getId());
+        Integer idx = result.getStation().getStationIndex();
+        dto.setStationId(idx != null ? idx.longValue() : result.getStation().getId());
         dto.setStationName(result.getStation().getName());
 
         List<HourlyPlanDto> plans = result.getHourlyPlans().stream()
