@@ -32,7 +32,20 @@
       "Bash(python *)",
       "Bash(git revert *)",
       "Bash(git merge *)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(Select-Object -First 20)",
+      "Bash(Format-Table FullName)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\" -Recurse -Directory -ErrorAction SilentlyContinue | Select-Object -First 30 | ForEach-Object { $_.FullName })",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\\\\src\" -Recurse -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\" -Recurse -Filter \"*.java\")",
+      "Bash(Select-Object FullName)",
+      "Bash(rm \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\\\\src\\\\main\\\\java\\\\com\\\\capstone\\\\capstone\\\\service\\\\DailyAiSchedulerService.java\")",
+      "Bash(rm \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\\\\src\\\\main\\\\java\\\\com\\\\capstone\\\\capstone\\\\mqtt\\\\MqttScheduleRequestSubscriber.java\")",
+      "Bash(rm \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\\\\src\\\\main\\\\java\\\\com\\\\capstone\\\\capstone\\\\mqtt\\\\MqttAiRequestSubscriber.java\")",
+      "Bash(rm \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\\\\src\\\\main\\\\java\\\\com\\\\capstone\\\\capstone\\\\service\\\\AiScheduleService.java\")",
+      "Bash(PGPASSWORD=2uQP8A2dLX9W5fQ psql *)",
+      "Bash(where psql *)",
+      "Bash(curl -s --connect-timeout 3 http://localhost:8080/api/telemetry/latest)"
     ]
   }
 }
