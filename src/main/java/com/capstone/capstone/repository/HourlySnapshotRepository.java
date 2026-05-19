@@ -17,6 +17,9 @@ public interface HourlySnapshotRepository extends JpaRepository<HourlySnapshot, 
 
     List<HourlySnapshot> findByRecordedAtBetweenOrderByRecordedAt(LocalDateTime start, LocalDateTime end);
 
+    List<HourlySnapshot> findByRecordedAtBetweenAndStationStationIndexOrderByRecordedAt(
+            LocalDateTime start, LocalDateTime end, Integer stationIndex);
+
     // 7일 초과분 삭제용
     void deleteByRecordedAtBefore(LocalDateTime cutoff);
 }

@@ -23,14 +23,16 @@ public class StatsController {
 
     @GetMapping("/daily")
     public ResponseEntity<List<DailyStatsDto>> getDailyStats(
-            @RequestParam(defaultValue = "30") int days) {
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(required = false) Integer stationId) {
 
         LocalDate today = LocalDate.now();
         LocalDateTime from = today.minusDays(days - 1).atStartOfDay();
         LocalDateTime to = today.plusDays(1).atStartOfDay();
 
-        List<HourlySnapshot> snapshots =
-                hourlySnapshotRepository.findByRecordedAtBetweenOrderByRecordedAt(from, to);
+        List<HourlySnapshot> snapshots = (stationId != null)
+                ? hourlySnapshotRepository.findByRecordedAtBetweenAndStationStationIndexOrderByRecordedAt(from, to, stationId)
+                : hourlySnapshotRepository.findByRecordedAtBetweenOrderByRecordedAt(from, to);
 
         Map<LocalDate, List<HourlySnapshot>> byDay = snapshots.stream()
                 .collect(Collectors.groupingBy(s -> s.getRecordedAt().toLocalDate()));
