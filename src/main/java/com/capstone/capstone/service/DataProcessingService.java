@@ -3,6 +3,7 @@ package com.capstone.capstone.service;
 import com.capstone.capstone.dto.ScheduleResponseDto;
 import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
 import com.capstone.capstone.dto.mqtt.MqttStationDto;
+import com.capstone.capstone.repository.HourlySnapshotRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +32,7 @@ public class DataProcessingService {
     private final TelemetryPersistenceService persistenceService;
     private final AiRequestBuilderService aiRequestBuilderService;
     private final AiService aiService;
+    private final HourlySnapshotRepository snapshotRepository;
 
     // 최신 MQTT 데이터 (스레드 안전)
     private final AtomicReference<MqttPayloadDto> latestData = new AtomicReference<>();
@@ -106,6 +109,22 @@ public class DataProcessingService {
         }
     }
 
+    private boolean hasSevenDaysOfSnapshots() {
+        return snapshotRepository.findFirstByOrderByRecordedAtAsc().map(earliest -> {
+            long daysAvailable = ChronoUnit.DAYS.between(
+                    earliest.getRecordedAt().toLocalDate(), LocalDate.now());
+            if (daysAvailable < 7) {
+                log.warn("[22:10 AI 요청 스킵] 7일치 스냅샷 부족 - 현재 {}일치 데이터 보유 (7일치 필요)",
+                        daysAvailable);
+                return false;
+            }
+            return true;
+        }).orElseGet(() -> {
+            log.warn("[22:10 AI 요청 스킵] 스냅샷 데이터 없음 - 시뮬레이션 데이터 축적 필요");
+            return false;
+        });
+    }
+
     private void checkAndTriggerAiRequest(MqttPayloadDto data) {
         if (data.getStations() == null || data.getStations().isEmpty()) return;
         String timestamp = data.getStations().get(0).getHeader().getTimestamp();
@@ -119,6 +138,8 @@ public class DataProcessingService {
             LocalDate prev = lastAiTriggerDate.get();
             if (prev != null && prev.equals(triggerDate)) return;
             if (!lastAiTriggerDate.compareAndSet(prev, triggerDate)) return;
+
+            if (!hasSevenDaysOfSnapshots()) return;
 
             log.info("[22:10 AI 요청] IoT 타임스탬프 기준 트리거 ({})", timestamp);
             new Thread(() -> {
