@@ -1,6 +1,7 @@
 package com.capstone.capstone.controller;
 
 import com.capstone.capstone.dto.DailyStatsDto;
+import com.capstone.capstone.dto.HourlySolarDto;
 import com.capstone.capstone.entity.HourlySnapshot;
 import com.capstone.capstone.repository.HourlySnapshotRepository;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +51,30 @@ public class StatsController {
             dto.setPeakDemand(daySnaps.stream().mapToInt(HourlySnapshot::getDemandCount).max().orElse(0));
             result.add(dto);
         }
+
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/solar/today")
+    public ResponseEntity<List<HourlySolarDto>> getTodaySolarActual() {
+        LocalDateTime from = LocalDate.now().atStartOfDay();
+        LocalDateTime to   = LocalDateTime.now();
+
+        List<HourlySnapshot> snapshots =
+                hourlySnapshotRepository.findByRecordedAtBetweenOrderByRecordedAt(from, to);
+
+        Map<Integer, Double> byHour = snapshots.stream()
+                .collect(Collectors.groupingBy(
+                        s -> s.getRecordedAt().getHour(),
+                        Collectors.summingDouble(s -> s.getPPv() / 1000.0)
+                ));
+
+        if (byHour.isEmpty()) return ResponseEntity.noContent().build();
+
+        List<HourlySolarDto> result = byHour.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> new HourlySolarDto(e.getKey(), Math.round(e.getValue() * 10.0) / 10.0))
+                .collect(Collectors.toList());
 
         return ResponseEntity.ok(result);
     }
