@@ -1,8 +1,11 @@
 package com.capstone.capstone.service;
 
 import com.capstone.capstone.dto.ScheduleResponseDto;
+import com.capstone.capstone.dto.mqtt.MqttChargerStatusDto;
 import com.capstone.capstone.dto.mqtt.MqttPayloadDto;
 import com.capstone.capstone.dto.mqtt.MqttStationDto;
+import com.capstone.capstone.entity.ChargingStation;
+import com.capstone.capstone.entity.HourlySnapshot;
 import com.capstone.capstone.repository.ChargingStationRepository;
 import com.capstone.capstone.repository.HourlySnapshotRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -10,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -23,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -39,6 +44,7 @@ public class DataProcessingService {
     // 최신 MQTT 데이터 (스레드 안전)
     private final AtomicReference<MqttPayloadDto> latestData = new AtomicReference<>();
     private final AtomicReference<LocalDate> lastAiTriggerDate = new AtomicReference<>();
+    private final AtomicReference<LocalDateTime> lastSnapshotSimHour = new AtomicReference<>();
 
     // SSE 구독자 목록 (스레드 안전)
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
@@ -63,6 +69,7 @@ public class DataProcessingService {
             latestData.set(data);
             broadcast(data);
             persistenceService.persist(data);
+            checkAndSaveSimulationSnapshot(data);
             checkAndTriggerAiRequest(data);
 
             return data;
@@ -108,6 +115,54 @@ public class DataProcessingService {
             emitter.send(SseEmitter.event().name("telemetry").data(json));
         } catch (IOException e) {
             emitters.remove(emitter);
+        }
+    }
+
+    @Transactional
+    public void checkAndSaveSimulationSnapshot(MqttPayloadDto data) {
+        if (data.getStations() == null || data.getStations().isEmpty()) return;
+        String timestamp = data.getStations().get(0).getHeader().getTimestamp();
+        if (timestamp == null) return;
+        try {
+            ZonedDateTime kst = ZonedDateTime.parse(timestamp).withZoneSameInstant(ZoneId.of("Asia/Seoul"));
+            if (kst.getMinute() != 0) return;
+
+            LocalDateTime simHour = kst.toLocalDateTime().truncatedTo(ChronoUnit.HOURS);
+            LocalDateTime prev = lastSnapshotSimHour.get();
+            if (prev != null && !simHour.isAfter(prev)) return;
+            if (!lastSnapshotSimHour.compareAndSet(prev, simHour)) return;
+
+            long existing = snapshotRepository.countByRecordedAtBetween(simHour, simHour.plusMinutes(59));
+            if (existing > 0) {
+                log.debug("[시뮬레이션 스냅샷] {} 이미 저장됨 - 스킵", simHour);
+                return;
+            }
+
+            Map<Integer, ChargingStation> indexToStation = stationRepository.findAll().stream()
+                    .filter(s -> s.getStationIndex() != null)
+                    .collect(Collectors.toMap(ChargingStation::getStationIndex, s -> s));
+
+            for (MqttStationDto mqttStation : data.getStations()) {
+                ChargingStation station = indexToStation.get(mqttStation.getHeader().getStationId());
+                if (station == null) continue;
+
+                HourlySnapshot snap = new HourlySnapshot();
+                snap.setStation(station);
+                snap.setRecordedAt(simHour);
+                snap.setSoc(mqttStation.getPayload().getStateOfCharge().getSoc());
+                snap.setCapacityWh(mqttStation.getPayload().getStateOfCharge().getCapacityWh());
+                snap.setDemandCount((int) mqttStation.getPayload().getChargerStatus().stream()
+                        .filter(MqttChargerStatusDto::isHasDemand).count());
+                snap.setPPv(mqttStation.getPayload().getPowerMetricsW().getPPv());
+                snap.setPLoad(mqttStation.getPayload().getPowerMetricsW().getPLoad());
+                snap.setPEss(mqttStation.getPayload().getPowerMetricsW().getPEss());
+                snap.setPGrid(mqttStation.getPayload().getPowerMetricsW().getPGrid());
+                snap.setPTr(mqttStation.getPayload().getPowerMetricsW().getPTr());
+                snapshotRepository.save(snap);
+            }
+            log.info("[시뮬레이션 스냅샷 저장] KST {}", simHour);
+        } catch (Exception e) {
+            log.warn("[시뮬레이션 스냅샷] 타임스탬프 파싱 실패: {}", timestamp);
         }
     }
 
