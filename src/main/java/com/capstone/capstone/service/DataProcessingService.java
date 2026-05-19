@@ -198,10 +198,11 @@ public class DataProcessingService {
 
             if (!hasSevenDaysOfSnapshots()) return;
 
+            LocalDateTime simKstTime = kst.toLocalDateTime();
             log.info("[22:10 AI 요청] IoT 타임스탬프 기준 트리거 ({})", timestamp);
             new Thread(() -> {
                 try {
-                    Map<String, Object> payload = aiRequestBuilderService.buildRawAiRequest();
+                    Map<String, Object> payload = aiRequestBuilderService.buildRawAiRequest(simKstTime);
                     aiService.sendRaw(payload);
                     log.info("[22:10 AI 요청 완료]");
                 } catch (Exception e) {

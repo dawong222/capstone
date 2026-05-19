@@ -32,11 +32,15 @@ public class AiRequestBuilderService {
 
     // ─── 원래 파이프라인: DB + 기상청 API로 AI 요청 직접 생성 ─────────────
 
-    @Transactional(readOnly = true)
     public Map<String, Object> buildRawAiRequest() {
-        LocalDate today      = LocalDate.now();
+        return buildRawAiRequest(LocalDateTime.now(KST));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> buildRawAiRequest(LocalDateTime referenceTime) {
+        LocalDate today      = referenceTime.toLocalDate();
         LocalDate targetDate = today.plusDays(1);
-        ZonedDateTime callTime = ZonedDateTime.now(KST);
+        ZonedDateTime callTime = referenceTime.atZone(KST);
         DateTimeFormatter iso     = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
         DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("yyyyMMdd");
         String ts = callTime.format(iso);
@@ -166,7 +170,7 @@ public class AiRequestBuilderService {
 
         // ── 과거 수요/발전 이력 (hourly_snapshot, 최근 7일) ────────────
         LocalDateTime snapshotFrom = today.minusDays(7).atStartOfDay();
-        LocalDateTime snapshotTo   = LocalDateTime.now();
+        LocalDateTime snapshotTo   = referenceTime;
         List<HourlySnapshot> snapshots = snapshotRepository
                 .findByRecordedAtBetweenOrderByRecordedAt(snapshotFrom, snapshotTo);
         req.put("demand_past_demand_hourly", buildDemandHourly(snapshots, iso));
