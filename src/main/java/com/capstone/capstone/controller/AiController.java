@@ -36,10 +36,14 @@ public class AiController {
         // SSE(프론트) 브로드캐스트 — MQTT와 독립적으로 항상 시도
         try {
             ScheduleResponseDto schedule = schedulingService.convertToScheduleResponse(dto);
+            AiResponseDto.MetricsDto m = dto.getMetrics();
             dataProcessingService.broadcastScheduleUpdate(
                 dto.getRequestId(),
                 LocalDate.now().plusDays(1).toString(),
-                schedule
+                schedule,
+                m != null ? m.getCostReductionKrw() : null,
+                m != null ? m.getCostReductionPct() : null,
+                m != null ? m.getGridOnlyCostKrw()  : null
             );
         } catch (Exception e) {
             log.error("[SSE 브로드캐스트 실패] {}", e.getMessage());

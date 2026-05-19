@@ -33,6 +33,10 @@ public class ScheduleResultService {
 
         if (dto.getMetrics() != null) {
             scheduleMetricsRepository.save(buildScheduleMetrics(job, dto.getMetrics()));
+            job.setCostReductionKrw(dto.getMetrics().getCostReductionKrw());
+            job.setCostReductionPct(dto.getMetrics().getCostReductionPct());
+            job.setGridOnlyCostKrw(dto.getMetrics().getGridOnlyCostKrw());
+            scheduleJobRepository.save(job);
         }
 
         if (dto.getForecastResults() != null) {

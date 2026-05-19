@@ -7,6 +7,7 @@
 -- 기존 테이블 삭제 (FK 순서 역순)
 DROP TABLE IF EXISTS station_demand_forecast CASCADE;
 DROP TABLE IF EXISTS cluster_forecast CASCADE;
+DROP TABLE IF EXISTS cluster_state CASCADE;
 DROP TABLE IF EXISTS transfer CASCADE;
 DROP TABLE IF EXISTS hourly_plan CASCADE;
 DROP TABLE IF EXISTS schedule_result CASCADE;
@@ -135,7 +136,10 @@ CREATE TABLE schedule_job (
     created_at           TIMESTAMP,             -- 스프링 서버 수신 시각
     completed_at         TIMESTAMP,
     status               VARCHAR(50),           -- "COMPLETED" / "FAILED"
-    error_message        TEXT
+    error_message        TEXT,
+    cost_reduction_krw   DOUBLE PRECISION,
+    cost_reduction_pct   DOUBLE PRECISION,
+    grid_only_cost_krw   DOUBLE PRECISION
 );
 CREATE INDEX idx_job_target_date ON schedule_job(schedule_target_date);
 

@@ -46,7 +46,4 @@ public class ScheduleJob {
 
     @OneToMany(mappedBy = "scheduleJob", cascade = CascadeType.ALL)
     private List<ScheduleResult> results;
-
-    @OneToMany(mappedBy = "scheduleJob", cascade = CascadeType.ALL)
-    private List<ClusterState> clusterStates;
 }
