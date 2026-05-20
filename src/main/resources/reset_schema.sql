@@ -299,3 +299,4 @@ INSERT INTO charger (station_id, charger_index, charger_type, rated_power_kw) VA
     (5, 3, 'fast', 50.0),
     (5, 4, 'slow',  7.0);
 
+

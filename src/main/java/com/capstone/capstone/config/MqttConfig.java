@@ -63,7 +63,7 @@ public class MqttConfig {
         MqttConnectOptions options = new MqttConnectOptions();
         options.setServerURIs(new String[] {brokerUrl});
         options.setAutomaticReconnect(true);
-        options.setCleanSession(true);
+        options.setCleanSession(false);
 
         factory.setConnectionOptions(options);
 
