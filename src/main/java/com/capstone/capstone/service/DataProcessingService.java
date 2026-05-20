@@ -169,7 +169,8 @@ public class DataProcessingService {
             return false;
         }
         long minRowsPerDay = stationCount * 24;
-        long completeDays = snapshotRepository.countCompleteDays(minRowsPerDay);
+        LocalDateTime sevenDaysAgo = LocalDate.now().minusDays(7).atStartOfDay();
+        long completeDays = snapshotRepository.countCompleteDays(minRowsPerDay, sevenDaysAgo);
         if (completeDays < 7) {
             log.warn("[22:10 AI 요청 스킵] 완전한 7일치 스냅샷 부족 - 현재 {}일치 완료 ({}개 스테이션 × 24시간 기준)",
                     completeDays, stationCount);

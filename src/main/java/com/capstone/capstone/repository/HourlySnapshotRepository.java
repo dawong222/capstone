@@ -13,9 +13,9 @@ public interface HourlySnapshotRepository extends JpaRepository<HourlySnapshot, 
 
     Optional<HourlySnapshot> findFirstByOrderByRecordedAtAsc();
 
-    // 하루치 데이터가 minRowsPerDay 이상인 날의 수 (완전한 날 카운트)
-    @Query(value = "SELECT COUNT(*) FROM (SELECT DATE(recorded_at) FROM hourly_snapshot GROUP BY DATE(recorded_at) HAVING COUNT(*) >= :minRowsPerDay) t", nativeQuery = true)
-    long countCompleteDays(@Param("minRowsPerDay") long minRowsPerDay);
+    // 최근 7일 내에서 하루치 데이터가 minRowsPerDay 이상인 날의 수 (완전한 날 카운트)
+    @Query(value = "SELECT COUNT(*) FROM (SELECT DATE(recorded_at) FROM hourly_snapshot WHERE recorded_at >= :sevenDaysAgo GROUP BY DATE(recorded_at) HAVING COUNT(*) >= :minRowsPerDay) t", nativeQuery = true)
+    long countCompleteDays(@Param("minRowsPerDay") long minRowsPerDay, @Param("sevenDaysAgo") LocalDateTime sevenDaysAgo);
 
     long countByRecordedAtBetween(LocalDateTime start, LocalDateTime end);
 
