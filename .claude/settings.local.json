@@ -45,7 +45,9 @@
       "Bash(rm \"C:\\\\Users\\\\da572\\\\capstone\\\\capstone_spring\\\\src\\\\main\\\\java\\\\com\\\\capstone\\\\capstone\\\\service\\\\AiScheduleService.java\")",
       "Bash(PGPASSWORD=2uQP8A2dLX9W5fQ psql *)",
       "Bash(where psql *)",
-      "Bash(curl -s --connect-timeout 3 http://localhost:8080/api/telemetry/latest)"
+      "Bash(curl -s --connect-timeout 3 http://localhost:8080/api/telemetry/latest)",
+      "Bash(psql *)",
+      "PowerShell(pip install *)"
     ]
   }
 }
