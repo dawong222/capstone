@@ -44,7 +44,6 @@ public class DataProcessingService {
     // 최신 MQTT 데이터 (스레드 안전)
     private final AtomicReference<MqttPayloadDto> latestData = new AtomicReference<>();
     private final AtomicReference<LocalDate> lastAiTriggerDate = new AtomicReference<>();
-    private final AtomicReference<LocalDateTime> lastSnapshotSimHour = new AtomicReference<>();
 
     // SSE 구독자 목록 (스레드 안전)
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
@@ -128,9 +127,6 @@ public class DataProcessingService {
             if (kst.getMinute() != 0) return;
 
             LocalDateTime simHour = kst.toLocalDateTime().truncatedTo(ChronoUnit.HOURS);
-            LocalDateTime prev = lastSnapshotSimHour.get();
-            if (prev != null && !simHour.isAfter(prev)) return;
-            if (!lastSnapshotSimHour.compareAndSet(prev, simHour)) return;
 
             long existing = snapshotRepository.countByRecordedAtBetween(simHour, simHour.plusMinutes(59));
             if (existing > 0) {
