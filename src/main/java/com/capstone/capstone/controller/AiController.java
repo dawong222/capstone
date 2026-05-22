@@ -70,10 +70,15 @@ public class AiController {
 
     /** Raw 데이터를 AI 서버에 전송, 결과는 콜백(/ai/result)으로 수신 */
     @PostMapping("/v2/send")
-    public ResponseEntity<Void> sendRawToAi() {
-        Map<String, Object> payload = schedulingService.buildRawAiRequest();
-        aiService.sendRaw(payload);
-        return ResponseEntity.accepted().build();
+    public ResponseEntity<String> sendRawToAi() {
+        try {
+            Map<String, Object> payload = schedulingService.buildRawAiRequest();
+            aiService.sendRaw(payload);
+            return ResponseEntity.accepted().body("AI 서버 전송 완료");
+        } catch (Exception e) {
+            log.error("[AI 서버 전송 실패] {}", e.getMessage());
+            return ResponseEntity.status(502).body("AI 서버에 연결할 수 없습니다: " + e.getMessage());
+        }
     }
 
     /** 샘플/커스텀 payload를 AI 서버에 직접 전송, 결과는 콜백(/ai/result)으로 수신 */
