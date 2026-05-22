@@ -255,48 +255,49 @@ CREATE TABLE station_demand_forecast (
 -- ============================================================
 
 -- ── 충전 스테이션 5개 ─────────────────────────────────────────
--- station_index = AI/MQTT 0-based 인덱스
--- station_index=0 (LH강남힐스테이트) : 물리 스테이션 (IoT 실제 연결)
--- station_index=1~4                  : 시뮬레이션 스테이션
-INSERT INTO charging_station (name, location, station_index, ess_capacity_kwh, is_active) VALUES
-    ('LH강남힐스테이트',     '서울 강남구', 0, 100.0, TRUE),
-    ('LH서울지사',           '서울 강남구', 1, 100.0, TRUE),
-    ('강남구청 공영주차장',   '서울 강남구', 2, 100.0, TRUE),
-    ('강남한양수자인',        '서울 강남구', 3, 100.0, TRUE),
-    ('도곡렉슬 아파트',       '서울 강남구', 4, 100.0, TRUE);
+-- id = station_index = AI/MQTT 0-based 인덱스 (동일하게 맞춤)
+-- id=0 (LH강남힐스테이트) : 물리 스테이션 (IoT 실제 연결)
+-- id=1~4                  : 시뮬레이션 스테이션
+INSERT INTO charging_station (id, name, location, station_index, ess_capacity_kwh, is_active) VALUES
+    (0, 'LH강남힐스테이트',     '서울 강남구', 0, 100.0, TRUE),
+    (1, 'LH서울지사',           '서울 강남구', 1, 100.0, TRUE),
+    (2, '강남구청 공영주차장',   '서울 강남구', 2, 100.0, TRUE),
+    (3, '강남한양수자인',        '서울 강남구', 3, 100.0, TRUE),
+    (4, '도곡렉슬 아파트',       '서울 강남구', 4, 100.0, TRUE);
+SELECT setval('charging_station_id_seq', 4);
 
 -- ── 충전기 (스테이션당 5개, charger_index 0~4) ────────────────
 -- 패턴: fast(50kW) · slow(7kW) · slow(7kW) · fast(50kW) · slow(7kW)
 INSERT INTO charger (station_id, charger_index, charger_type, rated_power_kw) VALUES
-    -- LH강남힐스테이트 (id=1)
+    -- LH강남힐스테이트 (id=0)
+    (0, 0, 'fast', 50.0),
+    (0, 1, 'slow',  7.0),
+    (0, 2, 'slow',  7.0),
+    (0, 3, 'fast', 50.0),
+    (0, 4, 'slow',  7.0),
+    -- LH서울지사 (id=1)
     (1, 0, 'fast', 50.0),
     (1, 1, 'slow',  7.0),
     (1, 2, 'slow',  7.0),
     (1, 3, 'fast', 50.0),
     (1, 4, 'slow',  7.0),
-    -- LH서울지사 (id=2)
+    -- 강남구청 공영주차장 (id=2)
     (2, 0, 'fast', 50.0),
     (2, 1, 'slow',  7.0),
     (2, 2, 'slow',  7.0),
     (2, 3, 'fast', 50.0),
     (2, 4, 'slow',  7.0),
-    -- 강남구청 공영주차장 (id=3)
+    -- 강남한양수자인 (id=3)
     (3, 0, 'fast', 50.0),
     (3, 1, 'slow',  7.0),
     (3, 2, 'slow',  7.0),
     (3, 3, 'fast', 50.0),
     (3, 4, 'slow',  7.0),
-    -- 강남한양수자인 (id=4)
+    -- 도곡렉슬 아파트 (id=4)
     (4, 0, 'fast', 50.0),
     (4, 1, 'slow',  7.0),
     (4, 2, 'slow',  7.0),
     (4, 3, 'fast', 50.0),
-    (4, 4, 'slow',  7.0),
-    -- 도곡렉슬 아파트 (id=5)
-    (5, 0, 'fast', 50.0),
-    (5, 1, 'slow',  7.0),
-    (5, 2, 'slow',  7.0),
-    (5, 3, 'fast', 50.0),
-    (5, 4, 'slow',  7.0);
+    (4, 4, 'slow',  7.0);
 
 

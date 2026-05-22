@@ -162,14 +162,14 @@ public class DataProcessingService {
         }
     }
 
-    private boolean hasSevenDaysOfSnapshots() {
+    private boolean hasSevenDaysOfSnapshots(LocalDateTime simKstTime) {
         long stationCount = stationRepository.count();
         if (stationCount == 0) {
             log.warn("[22:10 AI 요청 스킵] 등록된 스테이션 없음");
             return false;
         }
         long minRowsPerDay = stationCount * 24;
-        LocalDateTime sevenDaysAgo = LocalDate.now().minusDays(7).atStartOfDay();
+        LocalDateTime sevenDaysAgo = simKstTime.toLocalDate().minusDays(7).atStartOfDay();
         long completeDays = snapshotRepository.countCompleteDays(minRowsPerDay, sevenDaysAgo);
         if (completeDays < 7) {
             log.warn("[22:10 AI 요청 스킵] 완전한 7일치 스냅샷 부족 - 현재 {}일치 완료 ({}개 스테이션 × 24시간 기준)",
@@ -193,9 +193,8 @@ public class DataProcessingService {
             if (prev != null && prev.equals(triggerDate)) return;
             if (!lastAiTriggerDate.compareAndSet(prev, triggerDate)) return;
 
-            if (!hasSevenDaysOfSnapshots()) return;
-
             LocalDateTime simKstTime = kst.toLocalDateTime();
+            if (!hasSevenDaysOfSnapshots(simKstTime)) return;
             log.info("[22:10 AI 요청] IoT 타임스탬프 기준 트리거 ({})", timestamp);
             new Thread(() -> {
                 try {
