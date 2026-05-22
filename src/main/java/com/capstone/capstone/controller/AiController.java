@@ -71,8 +71,14 @@ public class AiController {
     /** Raw 데이터를 AI 서버에 전송, 결과는 콜백(/ai/result)으로 수신 */
     @PostMapping("/v2/send")
     public ResponseEntity<String> sendRawToAi() {
+        Map<String, Object> payload;
         try {
-            Map<String, Object> payload = schedulingService.buildRawAiRequest();
+            payload = schedulingService.buildRawAiRequest();
+        } catch (Exception e) {
+            log.error("[AI 요청 빌드 실패] {}", e.getMessage());
+            return ResponseEntity.status(500).body("AI 요청 데이터 빌드 실패 (기상청 API 등): " + e.getMessage());
+        }
+        try {
             aiService.sendRaw(payload);
             return ResponseEntity.accepted().body("AI 서버 전송 완료");
         } catch (Exception e) {
