@@ -57,8 +57,10 @@ public class StatsController {
 
     @GetMapping("/solar/today")
     public ResponseEntity<List<HourlySolarDto>> getTodaySolarActual() {
-        LocalDateTime from = LocalDate.now().atStartOfDay();
-        LocalDateTime to   = LocalDateTime.now();
+        java.time.ZoneId KST = java.time.ZoneId.of("Asia/Seoul");
+        LocalDateTime from = LocalDate.now(KST).atStartOfDay();
+        // 시뮬레이션은 하루치 전체가 미리 저장되므로 현재 시각이 아닌 오늘 자정을 상한으로 사용
+        LocalDateTime to   = LocalDate.now(KST).plusDays(1).atStartOfDay();
 
         List<HourlySnapshot> snapshots =
                 hourlySnapshotRepository.findByRecordedAtBetweenOrderByRecordedAt(from, to);
