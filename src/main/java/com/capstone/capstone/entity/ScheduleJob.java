@@ -47,6 +47,9 @@ public class ScheduleJob {
     @Column(columnDefinition = "TEXT")
     private String llmSummaryText;
 
+    @Column(columnDefinition = "TEXT")
+    private String llmBackendDisplayText;
+
     private String llmGenerationMethod;
 
     @OneToMany(mappedBy = "scheduleJob", cascade = CascadeType.ALL)

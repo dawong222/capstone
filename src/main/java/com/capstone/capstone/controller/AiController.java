@@ -45,8 +45,9 @@ public class AiController {
                 m != null ? m.getCostReductionKrw() : null,
                 m != null ? m.getCostReductionPct() : null,
                 m != null ? m.getGridOnlyCostKrw()  : null,
-                llm != null ? llm.getSummary() : null,
-                llm != null ? llm.getGenerationMethod() : null
+                llm != null ? llm.getSummaryText() : null,
+                llm != null ? llm.getBackendDisplayText() : null,
+                llm != null ? llm.getSummaryMode() : null
             );
         } catch (Exception e) {
             log.error("[SSE 브로드캐스트 실패] {}", e.getMessage());

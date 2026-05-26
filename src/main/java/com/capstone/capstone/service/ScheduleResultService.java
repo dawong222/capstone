@@ -40,8 +40,9 @@ public class ScheduleResultService {
         }
 
         if (dto.getLlmSummary() != null) {
-            job.setLlmSummaryText(dto.getLlmSummary().getSummary());
-            job.setLlmGenerationMethod(dto.getLlmSummary().getGenerationMethod());
+            job.setLlmSummaryText(dto.getLlmSummary().getSummaryText());
+            job.setLlmBackendDisplayText(dto.getLlmSummary().getBackendDisplayText());
+            job.setLlmGenerationMethod(dto.getLlmSummary().getSummaryMode());
             scheduleJobRepository.save(job);
         }
 
@@ -236,6 +237,7 @@ public class ScheduleResultService {
         dto.setCreatedAt(job.getCreatedAt().toString());
         dto.setStatus(job.getStatus());
         dto.setLlmSummaryText(job.getLlmSummaryText());
+        dto.setLlmBackendDisplayText(job.getLlmBackendDisplayText());
         dto.setLlmGenerationMethod(job.getLlmGenerationMethod());
 
         List<StationScheduleResponseDto> stations = scheduleResultRepository
@@ -303,6 +305,7 @@ public class ScheduleResultService {
         dto.setCostReductionPct(job.getCostReductionPct());
         dto.setGridOnlyCostKrw(job.getGridOnlyCostKrw());
         dto.setLlmSummaryText(job.getLlmSummaryText());
+        dto.setLlmBackendDisplayText(job.getLlmBackendDisplayText());
         dto.setLlmGenerationMethod(job.getLlmGenerationMethod());
         return dto;
     }

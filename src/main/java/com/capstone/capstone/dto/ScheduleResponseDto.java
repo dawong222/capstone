@@ -14,5 +14,6 @@ public class ScheduleResponseDto {
     private String status;
     private List<StationScheduleResponseDto> stations;
     private String llmSummaryText;
+    private String llmBackendDisplayText;
     private String llmGenerationMethod;
 }

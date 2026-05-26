@@ -212,7 +212,7 @@ public class DataProcessingService {
 
     public void broadcastScheduleUpdate(String requestId, String targetDate, ScheduleResponseDto schedule,
             Double costReductionKrw, Double costReductionPct, Double gridOnlyCostKrw,
-            String llmSummaryText, String llmGenerationMethod) {
+            String llmSummaryText, String llmBackendDisplayText, String llmGenerationMethod) {
         try {
             java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
             payload.put("requestId", requestId != null ? requestId : "");
@@ -224,8 +224,9 @@ public class DataProcessingService {
             if (costReductionKrw != null) payload.put("costReductionKrw", costReductionKrw);
             if (costReductionPct != null) payload.put("costReductionPct", costReductionPct);
             if (gridOnlyCostKrw != null)  payload.put("gridOnlyCostKrw",  gridOnlyCostKrw);
-            if (llmSummaryText != null)   payload.put("llmSummaryText",   llmSummaryText);
-            if (llmGenerationMethod != null) payload.put("llmGenerationMethod", llmGenerationMethod);
+            if (llmSummaryText != null)        payload.put("llmSummaryText",        llmSummaryText);
+            if (llmBackendDisplayText != null) payload.put("llmBackendDisplayText", llmBackendDisplayText);
+            if (llmGenerationMethod != null)   payload.put("llmGenerationMethod",   llmGenerationMethod);
             String json = objectMapper.writeValueAsString(payload);
             for (SseEmitter emitter : new ArrayList<>(emitters)) {
                 try {

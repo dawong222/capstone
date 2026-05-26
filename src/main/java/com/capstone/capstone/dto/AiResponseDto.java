@@ -124,15 +124,17 @@ public class AiResponseDto {
 
     @Getter @Setter
     public static class LlmSummaryDto {
-        private String summary;
+        @JsonProperty("summary_status")
+        private String summaryStatus;
 
-        @JsonProperty("generation_method")
-        private String generationMethod;
+        @JsonProperty("summary_mode")
+        private String summaryMode;
 
-        private String model;
+        @JsonProperty("summary_text")
+        private String summaryText;
 
-        @JsonProperty("generated_at")
-        private String generatedAt;
+        @JsonProperty("backend_display_text")
+        private String backendDisplayText;
     }
 
     @Getter @Setter

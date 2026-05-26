@@ -14,5 +14,6 @@ public class ScheduleHistoryItemDto {
     private Double costReductionPct;
     private Double gridOnlyCostKrw;
     private String llmSummaryText;
+    private String llmBackendDisplayText;
     private String llmGenerationMethod;
 }

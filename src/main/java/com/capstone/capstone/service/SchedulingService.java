@@ -73,8 +73,9 @@ public class SchedulingService {
         response.setStations(stations);
 
         if (dto.getLlmSummary() != null) {
-            response.setLlmSummaryText(dto.getLlmSummary().getSummary());
-            response.setLlmGenerationMethod(dto.getLlmSummary().getGenerationMethod());
+            response.setLlmSummaryText(dto.getLlmSummary().getSummaryText());
+            response.setLlmBackendDisplayText(dto.getLlmSummary().getBackendDisplayText());
+            response.setLlmGenerationMethod(dto.getLlmSummary().getSummaryMode());
         }
 
         return response;
