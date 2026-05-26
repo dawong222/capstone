@@ -35,6 +35,9 @@ public class AiResponseDto {
     @JsonProperty("station_day_ahead_schedule")
     private List<StationScheduleDto> stationDayAheadSchedule;
 
+    @JsonProperty("llm_summary")
+    private LlmSummaryDto llmSummary;
+
     @Getter @Setter
     public static class Status {
         @JsonProperty("is_success")
@@ -117,6 +120,19 @@ public class AiResponseDto {
 
         @JsonProperty("predicted_demand_kwh")
         private Double predictedDemandKwh;
+    }
+
+    @Getter @Setter
+    public static class LlmSummaryDto {
+        private String summary;
+
+        @JsonProperty("generation_method")
+        private String generationMethod;
+
+        private String model;
+
+        @JsonProperty("generated_at")
+        private String generatedAt;
     }
 
     @Getter @Setter

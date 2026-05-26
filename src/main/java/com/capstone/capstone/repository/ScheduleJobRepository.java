@@ -14,4 +14,6 @@ public interface ScheduleJobRepository extends JpaRepository<ScheduleJob, Long> 
     Optional<ScheduleJob> findFirstByScheduleTargetDateOrderByCreatedAtDesc(LocalDate date);
 
     List<ScheduleJob> findTop10ByOrderByCreatedAtDesc();
+
+    Optional<ScheduleJob> findFirstByLlmSummaryTextIsNotNullOrderByCreatedAtDesc();
 }

@@ -42,4 +42,11 @@ public class ApiScheduleController {
     public ResponseEntity<List<ScheduleHistoryItemDto>> getHistory() {
         return ResponseEntity.ok(schedulingService.getScheduleHistory());
     }
+
+    @GetMapping("/llm-summary")
+    public ResponseEntity<ScheduleHistoryItemDto> getLatestLlmSummary() {
+        return schedulingService.getLatestLlmSummary()
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
+    }
 }

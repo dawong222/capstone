@@ -71,6 +71,12 @@ public class SchedulingService {
             }).collect(Collectors.toList());
 
         response.setStations(stations);
+
+        if (dto.getLlmSummary() != null) {
+            response.setLlmSummaryText(dto.getLlmSummary().getSummary());
+            response.setLlmGenerationMethod(dto.getLlmSummary().getGenerationMethod());
+        }
+
         return response;
     }
 
@@ -80,5 +86,9 @@ public class SchedulingService {
 
     public List<ScheduleHistoryItemDto> getScheduleHistory() {
         return scheduleResultService.getScheduleHistory();
+    }
+
+    public Optional<ScheduleHistoryItemDto> getLatestLlmSummary() {
+        return scheduleResultService.getLatestLlmSummary();
     }
 }

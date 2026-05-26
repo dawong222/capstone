@@ -37,13 +37,16 @@ public class AiController {
         try {
             ScheduleResponseDto schedule = schedulingService.convertToScheduleResponse(dto);
             AiResponseDto.MetricsDto m = dto.getMetrics();
+            AiResponseDto.LlmSummaryDto llm = dto.getLlmSummary();
             dataProcessingService.broadcastScheduleUpdate(
                 dto.getRequestId(),
                 LocalDate.now().plusDays(1).toString(),
                 schedule,
                 m != null ? m.getCostReductionKrw() : null,
                 m != null ? m.getCostReductionPct() : null,
-                m != null ? m.getGridOnlyCostKrw()  : null
+                m != null ? m.getGridOnlyCostKrw()  : null,
+                llm != null ? llm.getSummary() : null,
+                llm != null ? llm.getGenerationMethod() : null
             );
         } catch (Exception e) {
             log.error("[SSE 브로드캐스트 실패] {}", e.getMessage());

@@ -44,6 +44,11 @@ public class ScheduleJob {
 
     private Double gridOnlyCostKrw;
 
+    @Column(columnDefinition = "TEXT")
+    private String llmSummaryText;
+
+    private String llmGenerationMethod;
+
     @OneToMany(mappedBy = "scheduleJob", cascade = CascadeType.ALL)
     private List<ScheduleResult> results;
 }

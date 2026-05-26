@@ -39,6 +39,12 @@ public class ScheduleResultService {
             scheduleJobRepository.save(job);
         }
 
+        if (dto.getLlmSummary() != null) {
+            job.setLlmSummaryText(dto.getLlmSummary().getSummary());
+            job.setLlmGenerationMethod(dto.getLlmSummary().getGenerationMethod());
+            scheduleJobRepository.save(job);
+        }
+
         if (dto.getForecastResults() != null) {
             saveForecastResults(job, dto.getForecastResults());
         }
@@ -211,6 +217,12 @@ public class ScheduleResultService {
     }
 
     @Transactional(readOnly = true)
+    public Optional<ScheduleHistoryItemDto> getLatestLlmSummary() {
+        return scheduleJobRepository.findFirstByLlmSummaryTextIsNotNullOrderByCreatedAtDesc()
+                .map(this::toHistoryItemDto);
+    }
+
+    @Transactional(readOnly = true)
     public List<ScheduleHistoryItemDto> getScheduleHistory() {
         return scheduleJobRepository.findTop10ByOrderByCreatedAtDesc().stream()
                 .map(this::toHistoryItemDto)
@@ -223,6 +235,8 @@ public class ScheduleResultService {
         dto.setTargetDate(job.getScheduleTargetDate().toString());
         dto.setCreatedAt(job.getCreatedAt().toString());
         dto.setStatus(job.getStatus());
+        dto.setLlmSummaryText(job.getLlmSummaryText());
+        dto.setLlmGenerationMethod(job.getLlmGenerationMethod());
 
         List<StationScheduleResponseDto> stations = scheduleResultRepository
                 .findByScheduleJobId(job.getId()).stream()
@@ -288,6 +302,8 @@ public class ScheduleResultService {
         dto.setCostReductionKrw(job.getCostReductionKrw());
         dto.setCostReductionPct(job.getCostReductionPct());
         dto.setGridOnlyCostKrw(job.getGridOnlyCostKrw());
+        dto.setLlmSummaryText(job.getLlmSummaryText());
+        dto.setLlmGenerationMethod(job.getLlmGenerationMethod());
         return dto;
     }
 }
