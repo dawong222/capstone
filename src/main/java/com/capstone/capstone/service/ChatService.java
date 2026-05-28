@@ -1,6 +1,7 @@
 package com.capstone.capstone.service;
 
 import com.capstone.capstone.dto.ChatResponseDto;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +45,17 @@ public class ChatService {
         if (llmResponse == null) {
             return ChatResponseDto.builder().answer("응답을 받지 못했습니다.").build();
         }
-        return objectMapper.convertValue(llmResponse, ChatResponseDto.class);
+
+        Map<String, Object> context = null;
+        JsonNode contextNode = llmResponse.path("context");
+        if (!contextNode.isMissingNode() && !contextNode.isNull()) {
+            context = objectMapper.convertValue(contextNode, new TypeReference<>() {});
+        }
+
+        return ChatResponseDto.builder()
+                .answer(llmResponse.path("answer").asText(""))
+                .intent(llmResponse.path("intent").asText(""))
+                .context(context)
+                .build();
     }
 }

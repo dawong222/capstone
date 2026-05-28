@@ -1,10 +1,11 @@
 package com.capstone.capstone.dto;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.util.Map;
 
 @Getter
 @Builder
@@ -13,5 +14,5 @@ import lombok.NoArgsConstructor;
 public class ChatResponseDto {
     private String answer;
     private String intent;
-    private JsonNode context;
+    private Map<String, Object> context;
 }
