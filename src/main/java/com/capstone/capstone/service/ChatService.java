@@ -15,6 +15,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Slf4j
@@ -25,6 +26,7 @@ public class ChatService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final JdbcTemplate jdbcTemplate;
+    private final WeatherApiService weatherApiService;
 
     @Value("${ai.llm.chat-url}")
     private String llmChatUrl;
@@ -167,6 +169,7 @@ public class ChatService {
             case "TRANSFER_STATUS"        -> transferStatus();
             case "PV_PEAK_TOMORROW"       -> pvPeakTomorrow();
             case "GRID_PEAK_TOMORROW"     -> gridPeakTomorrow();
+            case "WEATHER_TOMORROW"       -> weatherTomorrow();
             default -> noData("해당 질문에 대한 데이터를 찾을 수 없습니다.");
         };
     }
@@ -352,6 +355,52 @@ public class ChatService {
         return context;
     }
 
+    private Map<String, Object> weatherTomorrow() {
+        LocalDate tomorrow = LocalDate.now(ZoneId.of("Asia/Seoul")).plusDays(1);
+        String baseDate = LocalDate.now(ZoneId.of("Asia/Seoul")).format(DateTimeFormatter.BASIC_ISO_DATE);
+
+        List<Map<String, Object>> raw = weatherApiService.fetchRawForecastItems(61, 125, baseDate, tomorrow);
+        if (raw.isEmpty()) return noData("날씨 예보 데이터를 가져올 수 없습니다.");
+
+        List<Map<String, Object>> hourly = weatherApiService.buildWeatherForecastHourly(raw);
+        if (hourly.isEmpty()) return noData("날씨 예보 데이터를 가져올 수 없습니다.");
+
+        double minTemp = Double.MAX_VALUE, maxTemp = -Double.MAX_VALUE;
+        double maxPop = 0, maxPrecip = 0;
+        double sumHumidity = 0;
+        int count = 0;
+        boolean willRain = false;
+
+        for (Map<String, Object> h : hourly) {
+            double tmp = toDouble(h, "temperature_c");
+            double pop = toDouble(h, "pop_pct");
+            double pcp = toDouble(h, "precipitation_mm");
+            double pty = toDouble(h, "pty");
+
+            if (tmp < minTemp) minTemp = tmp;
+            if (tmp > maxTemp) maxTemp = tmp;
+            if (pop > maxPop) maxPop = pop;
+            if (pcp > maxPrecip) maxPrecip = pcp;
+            if (pty > 0) willRain = true;
+            sumHumidity += toDouble(h, "humidity_pct");
+            count++;
+        }
+
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("status", "ok");
+        context.put("data_type", "weather_forecast");
+        context.put("target_date", tomorrow.toString());
+        context.put("min_temp_c", Math.round(minTemp * 10.0) / 10.0);
+        context.put("max_temp_c", Math.round(maxTemp * 10.0) / 10.0);
+        context.put("max_pop_pct", (int) maxPop);
+        context.put("max_precipitation_mm", Math.round(maxPrecip * 10.0) / 10.0);
+        context.put("avg_humidity_pct", count > 0 ? (int) (sumHumidity / count) : 0);
+        context.put("will_rain", willRain);
+        context.put("hourly_count", hourly.size());
+        context.put("source", "KMA_SHORT_TERM");
+        return context;
+    }
+
     // ── 헬퍼 ─────────────────────────────────────────────────────
 
     private Long tomorrowOrLatestJobId() {
@@ -390,5 +439,12 @@ public class ChatService {
         context.put("status", "no_data");
         context.put("message", message);
         return context;
+    }
+
+    private double toDouble(Map<String, Object> map, String key) {
+        Object v = map.get(key);
+        if (v == null) return 0.0;
+        if (v instanceof Number) return ((Number) v).doubleValue();
+        try { return Double.parseDouble(v.toString().trim()); } catch (Exception e) { return 0.0; }
     }
 }
