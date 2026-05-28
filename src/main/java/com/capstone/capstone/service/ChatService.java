@@ -52,9 +52,9 @@ public class ChatService {
 
         log.info("[LLM 챗봇 요청] url={}, message={}", llmChatUrl, message);
 
-        JsonNode llmResponse;
+        String raw;
         try {
-            llmResponse = restTemplate.postForObject(llmChatUrl, httpRequest, JsonNode.class);
+            raw = restTemplate.postForObject(llmChatUrl, httpRequest, String.class);
         } catch (Exception e) {
             log.error("[LLM 챗봇 요청 실패] {}", e.getMessage());
             return ChatResponseDto.builder()
@@ -64,13 +64,25 @@ public class ChatService {
                     .build();
         }
 
-        log.info("[LLM 챗봇 응답] {}", llmResponse);
+        log.info("[LLM 챗봇 응답] {}", raw);
 
-        if (llmResponse == null) {
+        if (raw == null) {
             return ChatResponseDto.builder()
                     .answer("응답을 받지 못했습니다.")
                     .intent("NO_RESPONSE")
                     .context(noData("LLM 응답이 없습니다."))
+                    .build();
+        }
+
+        JsonNode llmResponse;
+        try {
+            llmResponse = objectMapper.readTree(raw);
+        } catch (Exception e) {
+            log.error("[LLM 응답 파싱 실패] {}", e.getMessage());
+            return ChatResponseDto.builder()
+                    .answer("응답 파싱에 실패했습니다.")
+                    .intent("PARSE_ERROR")
+                    .context(noData("응답 파싱 실패: " + e.getMessage()))
                     .build();
         }
 
