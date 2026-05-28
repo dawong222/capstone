@@ -27,7 +27,7 @@ public class ChatService {
     public ChatResponseDto chat(String sessionId, String message) {
         Map<String, Object> body = new HashMap<>();
         body.put("sessionId", sessionId);
-        body.put("message", message);
+        body.put("question", message);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
