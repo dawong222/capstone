@@ -25,7 +25,7 @@ public class ChatService {
     @Value("${ai.llm.chat-url}")
     private String llmChatUrl;
 
-    public ChatResponseDto chat(String sessionId, String message) throws Exception {
+    public ChatResponseDto chat(String sessionId, String message) {
         Map<String, Object> body = new HashMap<>();
         body.put("sessionId", sessionId);
         body.put("question", message);
@@ -42,7 +42,12 @@ public class ChatService {
             return ChatResponseDto.builder().answer("응답을 받지 못했습니다.").build();
         }
 
-        JsonNode llmResponse = objectMapper.readTree(raw);
+        JsonNode llmResponse;
+        try {
+            llmResponse = objectMapper.readTree(raw);
+        } catch (Exception e) {
+            throw new RuntimeException("LLM 응답 파싱 실패: " + e.getMessage(), e);
+        }
 
         Map<String, Object> context = null;
         JsonNode contextNode = llmResponse.path("context");
