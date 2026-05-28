@@ -6,9 +6,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -23,12 +25,18 @@ public class ChatService {
     private String llmChatUrl;
 
     public ChatResponseDto chat(String sessionId, String message) {
-        Map<String, Object> llmRequest = Map.of("sessionId", sessionId, "message", message);
+        Map<String, Object> body = new HashMap<>();
+        body.put("sessionId", sessionId);
+        body.put("message", message);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         log.info("[LLM 챗봇 요청] url={}, message={}", llmChatUrl, message);
         JsonNode llmResponse = restTemplate.postForObject(
                 llmChatUrl,
-                llmRequest,
+                request,
                 JsonNode.class
         );
         log.info("[LLM 챗봇 응답] {}", llmResponse);
