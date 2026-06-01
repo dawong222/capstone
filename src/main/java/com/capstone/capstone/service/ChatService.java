@@ -17,6 +17,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -43,7 +45,7 @@ public class ChatService {
         }
 
         String intent = classifyIntent(message, request.getHistory());
-        Map<String, Object> context = buildContext(intent);
+        Map<String, Object> context = buildContext(intent, message);
 
         Map<String, Object> llmRequest = new LinkedHashMap<>();
         llmRequest.put("sessionId", request.getSessionId());
@@ -160,9 +162,9 @@ public class ChatService {
 
     // ── Context DB 조회 ──────────────────────────────────────────
 
-    private Map<String, Object> buildContext(String intent) {
+    private Map<String, Object> buildContext(String intent, String question) {
         return switch (intent) {
-            case "DEMAND_PEAK_TOMORROW"   -> demandPeakTomorrow();
+            case "DEMAND_PEAK_TOMORROW"   -> demandPeakByDate(question);
             case "CURRENT_ESS_STATUS"     -> currentEssStatus();
             case "CURRENT_CHARGER_STATUS" -> currentChargerStatus();
             case "SCHEDULE_SUMMARY"       -> scheduleSummary();
@@ -174,44 +176,115 @@ public class ChatService {
         };
     }
 
-    private Map<String, Object> demandPeakTomorrow() {
-        Long jobId = tomorrowOrLatestJobId();
-        if (jobId == null) return noData("스케줄 데이터가 없습니다.");
+    private Map<String, Object> demandPeakByDate(String question) {
+        LocalDate explicitDate = extractTargetDate(question);
 
-        List<Map<String, Object>> peakRows = jdbcTemplate.queryForList("""
-                SELECT hour, SUM(predicted_demand_kwh) AS total_predicted_demand_kwh
-                FROM station_demand_forecast
-                WHERE schedule_job_id = ?
-                GROUP BY hour
-                ORDER BY total_predicted_demand_kwh DESC
-                LIMIT 1
-                """, jobId);
+        Long jobId;
+        LocalDate targetDate;
 
-        if (peakRows.isEmpty()) {
-            peakRows = jdbcTemplate.queryForList("""
-                    SELECT hp.hour, SUM(hp.load_pred_kwh) AS total_predicted_demand_kwh
-                    FROM hourly_plan hp
-                    JOIN schedule_result sr ON sr.id = hp.schedule_result_id
-                    WHERE sr.schedule_job_id = ?
-                    GROUP BY hp.hour
-                    ORDER BY total_predicted_demand_kwh DESC
-                    LIMIT 1
-                    """, jobId);
+        if (explicitDate != null) {
+            targetDate = explicitDate;
+            jobId = findJobIdByTargetDate(targetDate);
+            if (jobId == null) {
+                Map<String, Object> ctx = new LinkedHashMap<>();
+                ctx.put("status", "no_data");
+                ctx.put("data_type", "prediction");
+                ctx.put("target_date", targetDate.toString());
+                ctx.put("message", targetDate + " 스케줄링 데이터가 현재 DB에 없습니다.");
+                return ctx;
+            }
+        } else {
+            jobId = tomorrowOrLatestJobId();
+            if (jobId == null) return noData("저장된 AI 스케줄링 결과가 없습니다.");
+
+            Map<String, Object> job = jdbcTemplate.queryForMap(
+                    "SELECT schedule_target_date FROM schedule_job WHERE id = ?", jobId);
+            Object raw = job.get("schedule_target_date");
+            targetDate = (raw instanceof java.sql.Date)
+                    ? ((java.sql.Date) raw).toLocalDate()
+                    : LocalDate.parse(raw.toString());
         }
 
-        if (peakRows.isEmpty()) return noData("수요 예측 데이터가 없습니다.");
+        List<Map<String, Object>> clusterPeaks = getClusterDemandPeakRows(jobId);
+        List<Map<String, Object>> stationPeaks = getStationDemandPeakRows(jobId);
 
-        Map<String, Object> peak = peakRows.get(0);
-        int peakHour = ((Number) peak.get("hour")).intValue();
-        double peakDemand = ((Number) peak.get("total_predicted_demand_kwh")).doubleValue();
+        if (clusterPeaks.isEmpty() && stationPeaks.isEmpty())
+            return noData("수요 예측 데이터가 없습니다.");
 
-        Map<String, Object> context = new LinkedHashMap<>();
-        context.put("status", "ok");
-        context.put("data_type", "prediction");
-        context.put("peak_time_range", String.format("%02d:00~%02d:00", peakHour, peakHour + 1));
-        context.put("peak_total_predicted_demand_kwh", Math.round(peakDemand * 10.0) / 10.0);
-        context.put("source_tables", List.of("schedule_job", "station_demand_forecast", "schedule_result", "hourly_plan"));
-        return context;
+        Map<String, Object> ctx = new LinkedHashMap<>();
+        ctx.put("status", "ok");
+        ctx.put("data_type", "prediction");
+        ctx.put("target_date", targetDate.toString());
+        ctx.put("cluster_peak_hours", clusterPeaks);
+        ctx.put("station_peak_hours", stationPeaks);
+        ctx.put("source_tables", List.of("schedule_job", "station_demand_forecast", "charging_station"));
+        ctx.put("note", "이 값은 실제 확정 수요가 아니라 AI 수요 예측 결과입니다.");
+        return ctx;
+    }
+
+    private LocalDate extractTargetDate(String question) {
+        if (question == null) return null;
+        Pattern p = Pattern.compile("(\\d{1,2})\\s*월\\s*(\\d{1,2})\\s*일");
+        Matcher m = p.matcher(question);
+        if (m.find()) {
+            int month = Integer.parseInt(m.group(1));
+            int day   = Integer.parseInt(m.group(2));
+            int year  = LocalDate.now(ZoneId.of("Asia/Seoul")).getYear();
+            return LocalDate.of(year, month, day);
+        }
+        return null;
+    }
+
+    private Long findJobIdByTargetDate(LocalDate targetDate) {
+        List<Long> ids = jdbcTemplate.queryForList("""
+                SELECT id FROM schedule_job
+                WHERE schedule_target_date = ?
+                  AND UPPER(TRIM(status)) IN ('COMPLETED', 'SUCCESS', 'DONE')
+                ORDER BY created_at DESC NULLS LAST, id DESC
+                LIMIT 1
+                """, Long.class, targetDate);
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    private List<Map<String, Object>> getClusterDemandPeakRows(Long jobId) {
+        return jdbcTemplate.queryForList("""
+                WITH hourly AS (
+                    SELECT hour, SUM(predicted_demand_kwh) AS total_predicted_demand_kwh
+                    FROM station_demand_forecast
+                    WHERE schedule_job_id = ?
+                    GROUP BY hour
+                ),
+                ranked AS (
+                    SELECT hour, total_predicted_demand_kwh,
+                           RANK() OVER (ORDER BY total_predicted_demand_kwh DESC) AS rnk
+                    FROM hourly
+                )
+                SELECT hour, total_predicted_demand_kwh
+                FROM ranked
+                WHERE rnk = 1
+                ORDER BY hour
+                """, jobId);
+    }
+
+    private List<Map<String, Object>> getStationDemandPeakRows(Long jobId) {
+        return jdbcTemplate.queryForList("""
+                WITH station_hourly AS (
+                    SELECT sdf.station_index, cs.name AS station_name,
+                           sdf.hour, sdf.predicted_demand_kwh
+                    FROM station_demand_forecast sdf
+                    LEFT JOIN charging_station cs ON cs.station_index = sdf.station_index
+                    WHERE sdf.schedule_job_id = ?
+                ),
+                ranked AS (
+                    SELECT station_index, station_name, hour, predicted_demand_kwh,
+                           RANK() OVER (PARTITION BY station_index ORDER BY predicted_demand_kwh DESC) AS rnk
+                    FROM station_hourly
+                )
+                SELECT station_index, station_name, hour, predicted_demand_kwh
+                FROM ranked
+                WHERE rnk = 1
+                ORDER BY station_index, hour
+                """, jobId);
     }
 
     private Map<String, Object> currentEssStatus() {

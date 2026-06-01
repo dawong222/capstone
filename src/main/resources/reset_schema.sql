@@ -139,7 +139,10 @@ CREATE TABLE schedule_job (
     error_message        TEXT,
     cost_reduction_krw   DOUBLE PRECISION,
     cost_reduction_pct   DOUBLE PRECISION,
-    grid_only_cost_krw   DOUBLE PRECISION
+    grid_only_cost_krw   DOUBLE PRECISION,
+    llm_summary_text          TEXT,
+    llm_backend_display_text  TEXT,
+    llm_generation_method     VARCHAR(255)
 );
 CREATE INDEX idx_job_target_date ON schedule_job(schedule_target_date);
 
