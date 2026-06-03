@@ -189,12 +189,13 @@ public class DataProcessingService {
             if (kst.getHour() != 22 || kst.getMinute() != 10) return;
 
             LocalDate triggerDate = kst.toLocalDate();
+            LocalDateTime simKstTime = kst.toLocalDateTime();
+            if (!hasSevenDaysOfSnapshots(simKstTime)) return;
+
             LocalDate prev = lastAiTriggerDate.get();
             if (prev != null && prev.equals(triggerDate)) return;
             if (!lastAiTriggerDate.compareAndSet(prev, triggerDate)) return;
 
-            LocalDateTime simKstTime = kst.toLocalDateTime();
-            if (!hasSevenDaysOfSnapshots(simKstTime)) return;
             log.info("[22:10 AI 요청] IoT 타임스탬프 기준 트리거 ({})", timestamp);
             new Thread(() -> {
                 try {
@@ -203,6 +204,7 @@ public class DataProcessingService {
                     log.info("[22:10 AI 요청 완료]");
                 } catch (Exception e) {
                     log.error("[22:10 AI 요청 실패] {}", e.getMessage());
+                    lastAiTriggerDate.compareAndSet(triggerDate, prev);
                 }
             }, "ai-request-trigger").start();
         } catch (Exception e) {
