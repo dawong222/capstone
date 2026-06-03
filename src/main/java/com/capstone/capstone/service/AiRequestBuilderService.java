@@ -183,8 +183,9 @@ public class AiRequestBuilderService {
         req.put("demand_past_weather_hourly", weatherApiService.buildAsosWeatherHourly(asosRaw, "ASOS_108", "Seoul/Gangnam",        iso));
         req.put("pv_past_weather_hourly",     weatherApiService.buildAsosWeatherHourly(asosRaw, "ASOS_108", "Seoul/Gangnam", iso));
 
+        LocalDate realToday = LocalDate.now(KST);
         List<Map<String, Object>> forecastRaw =
-                weatherApiService.fetchRawForecastItems(61, 125, today.format(dateFmt), targetDate);
+                weatherApiService.fetchRawForecastItems(61, 125, realToday.format(dateFmt), realToday);
         req.put("demand_forecast_short_term_hourly",  buildDemandForecastHourly(allStations, snapshots, targetDate, iso));
         req.put("pv_forecast_short_term_hourly",      buildPvForecastHourly(allStations, snapshots, targetDate, iso));
         req.put("weather_forecast_short_term_hourly", weatherApiService.buildWeatherForecastHourly(forecastRaw));
